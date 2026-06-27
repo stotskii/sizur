@@ -16,8 +16,14 @@ export const picUrl = (g) => {
 /** Display image for an item: a user-added cutout if present, else its migrated picture. */
 export const itemImg = (item) => (item && (item.picData || picUrl(item.main_picture))) || ''
 
-/** Best available thumbnail for an outfit: our re-rendered one, else the migrated collage. */
-export const outfitThumb = (o) => (o && (o.thumbDataUrl || picUrl(o.picture))) || ''
+/**
+ * Best available thumbnail for an outfit, in order:
+ *  1. our freshly re-rendered thumb (after an edit)
+ *  2. the clean collage we composited from transparent cutouts (col_*)
+ *  3. the migrated GetWardrobe collage (last resort — has black item boxes)
+ */
+export const outfitThumb = (o) =>
+  (o && (o.thumbDataUrl || (o.collage && picUrl(o.collage)) || picUrl(o.picture))) || ''
 
 export const SEASONS = {
   spring: 'Весна',

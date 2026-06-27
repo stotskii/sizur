@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte'
-  import { ensureSeeded } from './lib/db.js'
+  import { ensureSeeded, ensureCollages } from './lib/db.js'
   import { loadAll } from './lib/store.svelte.js'
   import { ui } from './lib/state.svelte.js'
   import { isUnlocked } from './lib/gate.js'
@@ -25,6 +25,7 @@
   onMount(async () => {
     try {
       await ensureSeeded()
+      await ensureCollages()
       await loadAll()
       ready = true
     } catch (e) {

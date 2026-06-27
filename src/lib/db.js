@@ -49,6 +49,37 @@ export async function ensureSeeded() {
   })
 }
 
+/**
+ * One-time additive migration: attach the clean `collage` field to already-seeded
+ * outfits (existing installs skip the initial seed). Non-destructive — only sets
+ * `collage`, never touches items, edits, or thumbnails.
+ */
+export async function ensureCollages() {
+  const m = await db.meta.get('collages')
+  if (m && m.done) return
+  try {
+    const res = await fetch(`${BASE}wardrobe_export.json`)
+    const data = await res.json()
+    const map = new Map(data.outfits.map((o) => [o.guid, o.collage]).filter(([, c]) => c))
+    // A stale service worker may still serve the old JSON (no `collage`). Don't
+    // mark the migration done until we actually see clean collages — retry next load.
+    if (map.size === 0) return
+    await db.transaction('rw', db.outfits, db.meta, async () => {
+      const all = await db.outfits.toArray()
+      for (const o of all) {
+        const c = map.get(o.guid)
+        if (c && o.collage !== c) {
+          o.collage = c
+          await db.outfits.put(o)
+        }
+      }
+      await db.meta.put({ key: 'collages', done: true })
+    })
+  } catch {
+    /* keep falling back to migrated picture if the fetch fails */
+  }
+}
+
 export async function getItems() {
   return db.items.toArray()
 }
