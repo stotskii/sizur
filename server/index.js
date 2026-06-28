@@ -1,11 +1,20 @@
 // Стиль — ИИ-стилист, прокси. Держит ключ на сервере; PWA (статика) ходит сюда.
-// По умолчанию OpenRouter → claude-opus-4.8 (та же модель Claude, биллинг OpenRouter).
-// Anthropic-аккаунт в cyprus.env пустой, OpenRouter — с балансом.
+// Мультипровайдер: AI_PROVIDER = anthropic | openai | openrouter (по умолч. openrouter).
+//   anthropic  → нативный Messages API, claude-opus-4-8 (нужен ANTHROPIC_API_KEY с балансом)
+//   openai     → gpt-4.1 (OPENAI_API_KEY)
+//   openrouter → anthropic/claude-opus-4.8 (OPENROUTER_API_KEY)
 import http from 'node:http'
 
-const AI_BASE = process.env.AI_BASE_URL || 'https://openrouter.ai/api/v1'
-const AI_KEY = process.env.OPENROUTER_API_KEY || process.env.AI_KEY || ''
-const MODEL = process.env.AI_MODEL || 'anthropic/claude-opus-4.8'
+const PROVIDER = process.env.AI_PROVIDER || 'openrouter'
+const DEFAULTS = {
+  anthropic: { model: 'claude-opus-4-8', base: 'https://api.anthropic.com/v1', key: process.env.ANTHROPIC_API_KEY },
+  openai: { model: 'gpt-4.1', base: 'https://api.openai.com/v1', key: process.env.OPENAI_API_KEY },
+  openrouter: { model: 'anthropic/claude-opus-4.8', base: 'https://openrouter.ai/api/v1', key: process.env.OPENROUTER_API_KEY },
+}
+const cfg = DEFAULTS[PROVIDER] || DEFAULTS.openrouter
+const MODEL = process.env.AI_MODEL || cfg.model
+const AI_BASE = process.env.AI_BASE_URL || cfg.base
+const AI_KEY = process.env.AI_KEY || cfg.key || ''
 const PORT = Number(process.env.PORT || 8787)
 const APP_TOKEN = process.env.APP_TOKEN || ''
 const MOCK = process.env.MOCK === '1'
@@ -68,7 +77,30 @@ ${catalogLines(items)}
 - Отвечай по-русски, кратко. Возвращай ТОЛЬКО валидный JSON, без markdown и пояснений вокруг.`
 }
 
-async function callModel({ system, user, maxTokens = 2000 }) {
+async function callModel(args) {
+  return PROVIDER === 'anthropic' ? callAnthropic(args) : callOpenAICompat(args)
+}
+
+// Anthropic Messages API (нативно), без SDK.
+async function callAnthropic({ system, user, maxTokens = 2000 }) {
+  const res = await fetch(`${AI_BASE}/messages`, {
+    method: 'POST',
+    headers: { 'x-api-key': AI_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: maxTokens,
+      system,
+      messages: [{ role: 'user', content: user }],
+    }),
+  })
+  const j = await res.json().catch(() => ({}))
+  if (!res.ok || j.type === 'error') throw new Error(j.error?.message || `HTTP ${res.status}`)
+  const text = (j.content || []).find((b) => b.type === 'text')?.text || '{}'
+  return parseJson(text)
+}
+
+// OpenAI-совместимый (OpenAI / OpenRouter).
+async function callOpenAICompat({ system, user, maxTokens = 2000 }) {
   const res = await fetch(`${AI_BASE}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -149,7 +181,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204, cors(origin)); return res.end() }
   const url = req.url || '/'
   if (req.method === 'GET' && url === '/health') {
-    return json(res, 200, { ok: true, model: MODEL, base: AI_BASE, hasKey: !!AI_KEY }, origin)
+    return json(res, 200, { ok: true, provider: PROVIDER, model: MODEL, base: AI_BASE, hasKey: !!AI_KEY }, origin)
   }
   if (req.method !== 'POST') return json(res, 404, { error: 'not found' }, origin)
   if (APP_TOKEN && req.headers['x-app-token'] !== APP_TOKEN) return json(res, 401, { error: 'unauthorized' }, origin)

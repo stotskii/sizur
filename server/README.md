@@ -1,11 +1,18 @@
 # Стиль — ИИ-стилист (прокси)
 
 Тонкий бэкенд без npm-зависимостей (только Node 20+, global `fetch`). Держит ключ
-на сервере и ходит в **claude-opus-4.8 через OpenRouter** (Anthropic-аккаунт в
-`cyprus.env` пустой, OpenRouter — с балансом; модель та же). PWA на GitHub Pages
-статическая — ключ в клиент класть нельзя, поэтому ИИ-функции ходят сюда.
+на сервере; PWA на GitHub Pages статическая — ключ в клиент класть нельзя.
 
-Сменить провайдера/модель — через env (`AI_MODEL`, `AI_BASE_URL`), без правок кода.
+**Мультипровайдер** — выбор одним env `AI_PROVIDER` (все три проверены кодом, OpenAI и
+OpenRouter — на реальных вызовах):
+
+| `AI_PROVIDER` | модель | ключ | статус |
+|---|---|---|---|
+| `openai` | `gpt-4.1` | `OPENAI_API_KEY` (shared.env) | ✓ работает сразу |
+| `anthropic` | `claude-opus-4-8` | `ANTHROPIC_API_KEY` (cyprus.env) | нужен баланс (сейчас $0) |
+| `openrouter` | `anthropic/claude-opus-4.8` | `OPENROUTER_API_KEY` (cyprus.env) | ✓ работает, но через посредника |
+
+Сменить модель внутри провайдера — `AI_MODEL`. Промпты одинаковы для всех.
 
 ## Эндпоинты
 - `GET /health` → `{ ok, model, base, hasKey }`
@@ -25,7 +32,9 @@ curl localhost:8787/health
 ## Деплой на Hetzner (46.224.164.185)
 1. Скопировать `server/` на сервер.
 2. Создать `stylist-ai.env`:
-   - `OPENROUTER_API_KEY` — взять из `~/secrets/server1/cyprus.env` (там есть, с балансом).
+   - `AI_PROVIDER` + ключ провайдера (см. таблицу выше). По умолчанию `openai` +
+     `OPENAI_API_KEY` из `~/secrets/server1/shared.env`. Для Opus напрямую —
+     `AI_PROVIDER=anthropic` + пополненный `ANTHROPIC_API_KEY`.
    - `APP_TOKEN` — можно пусто (занавес; для 1 пользователя достаточно CORS).
    - `ALLOW_ORIGINS=https://sizur.xyz,http://localhost:5173`
 3. `docker compose up -d --build` (слушает `127.0.0.1:8787`).
