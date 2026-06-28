@@ -105,7 +105,7 @@
           <span>Снять или выбрать фото вещи</span>
         </label>
       {/if}
-      {#if busy}<div class="overlay">{progress || 'Обработка…'}</div>{/if}
+      {#if busy}<div class="overlay"><div class="ov-spin"></div><span>{progress || 'Обработка…'}</span></div>{/if}
     </div>
 
     {#if fileUrl}
@@ -153,7 +153,9 @@
   .photo-stage img { max-width: 100%; max-height: 100%; object-fit: contain; }
   .dropzone { display: flex; flex-direction: column; align-items: center; gap: 10px; color: var(--muted); font-size: 14px; padding: 30px; text-align: center; }
   .dz-ic { font-size: 40px; }
-  .overlay { position: absolute; inset: 0; background: rgba(244,241,236,.82); display: grid; place-items: center; color: var(--ink); font-size: 14px; }
+  .overlay { position: absolute; inset: 0; background: rgba(244,241,236,.82); display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center; color: var(--ink); font-size: 14px; text-align: center; padding: 0 24px; }
+  .ov-spin { width: 30px; height: 30px; border-radius: 50%; border: 3px solid rgba(0,0,0,.12); border-top-color: var(--ink); animation: ovspin .8s linear infinite; }
+  @keyframes ovspin { to { transform: rotate(360deg); } }
   .photo-controls { display: flex; flex-direction: column; gap: 14px; }
   .wide { border: none; background: var(--ink); color: #fff; border-radius: 12px; padding: 14px; font: inherit; font-size: 15px; font-weight: 600; }
   .wide:disabled { opacity: .6; }
