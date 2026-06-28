@@ -72,6 +72,12 @@ button { font-family: inherit; cursor: pointer; }
   display: flex; gap: 8px; overflow-x: auto;
   padding: 12px 18px; scrollbar-width: none;
 }
+/* fade the right edge of horizontally-scrollable chip rows as a scroll hint
+   (not the wrapping season row inside the item sheet) */
+.chips:not(.wrap) {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
+}
 .chips::-webkit-scrollbar { display: none; }
 .chip {
   flex: 0 0 auto;
