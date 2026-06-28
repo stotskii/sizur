@@ -1,0 +1,11 @@
+services:
+  stylist-ai:
+    build: .
+    image: stylist-ai-proxy
+    container_name: stylist-ai
+    restart: unless-stopped
+    env_file:
+      # На Hetzner укажи путь к файлу с ANTHROPIC_API_KEY (можно server1/cyprus.env)
+      - ./stylist-ai.env
+    ports:
+      - "127.0.0.1:8787:8787" # наружу не светим; впереди nginx/Caddy с TLS
