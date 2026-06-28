@@ -4,9 +4,12 @@
 //   openai     → gpt-4.1 (OPENAI_API_KEY)
 //   openrouter → anthropic/claude-opus-4.8 (OPENROUTER_API_KEY)
 import http from 'node:http'
+import fs from 'node:fs'
 
 const PROVIDER = process.env.AI_PROVIDER || 'openrouter'
 const DEFAULTS = {
+  // claude по ПОДПИСКЕ через OAuth (как Claude Code) — без API-кредитов
+  'anthropic-oauth': { model: 'claude-opus-4-8', base: 'https://api.anthropic.com/v1', key: null },
   anthropic: { model: 'claude-opus-4-8', base: 'https://api.anthropic.com/v1', key: process.env.ANTHROPIC_API_KEY },
   openai: { model: 'gpt-4.1', base: 'https://api.openai.com/v1', key: process.env.OPENAI_API_KEY },
   openrouter: { model: 'anthropic/claude-opus-4.8', base: 'https://openrouter.ai/api/v1', key: process.env.OPENROUTER_API_KEY },
@@ -78,7 +81,57 @@ ${catalogLines(items)}
 }
 
 async function callModel(args) {
-  return PROVIDER === 'anthropic' ? callAnthropic(args) : callOpenAICompat(args)
+  if (PROVIDER === 'anthropic-oauth') return callAnthropicOAuth(args)
+  if (PROVIDER === 'anthropic') return callAnthropic(args)
+  return callOpenAICompat(args)
+}
+
+// ---- Claude по подписке (OAuth, как Claude Code) ----
+const OAUTH_CLIENT_ID = process.env.ANTHROPIC_OAUTH_CLIENT_ID || '9d1c250a-e61b-44d9-88ed-5944d1962f5e'
+const OAUTH_TOKEN_URL = process.env.ANTHROPIC_OAUTH_TOKEN_URL || 'https://console.anthropic.com/v1/oauth/token'
+const RT_FILE = process.env.ANTHROPIC_REFRESH_TOKEN_FILE || '/data/refresh_token'
+let _oauth = { access: null, exp: 0 }
+
+function readRefreshToken() {
+  try { const t = fs.readFileSync(RT_FILE, 'utf8').trim(); if (t) return t } catch {}
+  return (process.env.ANTHROPIC_REFRESH_TOKEN || '').trim()
+}
+function persistRefreshToken(t) {
+  try { fs.mkdirSync(RT_FILE.replace(/\/[^/]*$/, ''), { recursive: true }); fs.writeFileSync(RT_FILE, t) } catch (e) { console.error('cannot persist refresh token:', e.message) }
+}
+async function oauthAccessToken() {
+  const now = Date.now()
+  if (_oauth.access && now < _oauth.exp - 60_000) return _oauth.access
+  const rt = readRefreshToken()
+  if (!rt) throw new Error('нет ANTHROPIC_REFRESH_TOKEN (войди в подписку через OAuth)')
+  const res = await fetch(OAUTH_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ grant_type: 'refresh_token', refresh_token: rt, client_id: OAUTH_CLIENT_ID }),
+  })
+  const j = await res.json().catch(() => ({}))
+  if (!res.ok || !j.access_token) throw new Error('oauth refresh failed: ' + (j.error_description || j.error || res.status))
+  _oauth.access = j.access_token
+  _oauth.exp = now + (j.expires_in || 3600) * 1000
+  if (j.refresh_token && j.refresh_token !== rt) persistRefreshToken(j.refresh_token) // ротация
+  return _oauth.access
+}
+async function callAnthropicOAuth({ system, user, maxTokens = 2000 }) {
+  const tok = await oauthAccessToken()
+  const res = await fetch(`${AI_BASE}/messages`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${tok}`,
+      'anthropic-version': '2023-06-01',
+      'anthropic-beta': 'oauth-2025-04-20',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }] }),
+  })
+  const j = await res.json().catch(() => ({}))
+  if (!res.ok || j.type === 'error') throw new Error(j.error?.message || `HTTP ${res.status}`)
+  const text = (j.content || []).find((b) => b.type === 'text')?.text || '{}'
+  return parseJson(text)
 }
 
 // Anthropic Messages API (нативно), без SDK.

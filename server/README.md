@@ -32,9 +32,9 @@ curl localhost:8787/health
 ## Деплой на Hetzner (46.224.164.185)
 1. Скопировать `server/` на сервер.
 2. Создать `stylist-ai.env`:
-   - `AI_PROVIDER` + ключ провайдера (см. таблицу выше). По умолчанию `openai` +
-     `OPENAI_API_KEY` из `~/secrets/server1/shared.env`. Для Opus напрямую —
-     `AI_PROVIDER=anthropic` + пополненный `ANTHROPIC_API_KEY`.
+   - По умолчанию **как у агента hermes**: `AI_PROVIDER=openrouter` + `OPENROUTER_API_KEY`
+     из `~/secrets/server1/cyprus.env` (тот же ключ с балансом, что читает hermes).
+     Альтернативы: `openai` + `OPENAI_API_KEY` (shared.env) или `anthropic` + пополненный ключ.
    - `APP_TOKEN` — можно пусто (занавес; для 1 пользователя достаточно CORS).
    - `ALLOW_ORIGINS=https://sizur.xyz,http://localhost:5173`
 3. `docker compose up -d --build` (слушает `127.0.0.1:8787`).
