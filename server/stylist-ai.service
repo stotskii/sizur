@@ -1,0 +1,17 @@
+[Unit]
+Description=Стиль — ИИ-стилист прокси (codex/openrouter)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/stylist/sizur/server
+EnvironmentFile=/opt/stylist/sizur/server/stylist-ai.env
+# HOME нужен, чтобы провайдер codex видел ~/.codex (codex login делается под этим же пользователем)
+Environment=HOME=/root
+ExecStart=/usr/bin/env node index.js
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
