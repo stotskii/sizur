@@ -1,15 +1,12 @@
 {
   "name": "stylist-ai-proxy",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Тонкий прокси к Claude для ИИ-стилиста «Стиль». Держит ANTHROPIC_API_KEY на сервере.",
+  "description": "Прокси к Claude (через OpenRouter) для ИИ-стилиста «Стиль». Держит ключ на сервере, без npm-зависимостей.",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.70.0"
   },
   "engines": {
     "node": ">=20"

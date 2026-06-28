@@ -1,40 +1,47 @@
-# Стиль — ИИ-стилист (прокси к Claude)
+# Стиль — ИИ-стилист (прокси)
 
-Тонкий бэкенд, который держит `ANTHROPIC_API_KEY` на сервере и ходит в Claude
-(`claude-opus-4-8`). PWA на GitHub Pages статическая — ключ в клиент класть нельзя,
-поэтому ИИ-функции ходят сюда.
+Тонкий бэкенд без npm-зависимостей (только Node 20+, global `fetch`). Держит ключ
+на сервере и ходит в **claude-opus-4.8 через OpenRouter** (Anthropic-аккаунт в
+`cyprus.env` пустой, OpenRouter — с балансом; модель та же). PWA на GitHub Pages
+статическая — ключ в клиент класть нельзя, поэтому ИИ-функции ходят сюда.
+
+Сменить провайдера/модель — через env (`AI_MODEL`, `AI_BASE_URL`), без правок кода.
 
 ## Эндпоинты
-- `GET /health` → `{ ok, model }`
-- `POST /stylist/build` — «собери лук». Тело: `{ items[], styleDNA, brief?, season? }` → `{ name, itemGuids[], rationale }`
-- `POST /stylist/check` — «проверка образа». Тело: `{ items[], outfit[], styleDNA }` → `{ verdict, score, dimensions[], summary }`
+- `GET /health` → `{ ok, model, base, hasKey }`
+- `POST /stylist/build` — «собери лук». `{ items[], styleDNA, brief?, season? }` → `{ name, itemGuids[], rationale }`
+- `POST /stylist/check` — «проверка образа». `{ items[], outfit[], styleDNA }` → `{ verdict, score, dimensions[], summary }`
 
-`items` — компактный гардероб (guid/категория/тип/бренд/цвета/сезоны). Каталог
-кэшируется (prompt caching), так что повторные вызовы дешёвые.
+`items` — компактный гардероб (guid/категория/тип/бренд/цвета/сезоны).
 
 ## Локально
 ```bash
-cp stylist-ai.env.example stylist-ai.env   # вписать ANTHROPIC_API_KEY
-npm install
-ANTHROPIC_API_KEY=... node index.js        # или через env_file
+cp stylist-ai.env.example stylist-ai.env   # вписать OPENROUTER_API_KEY
+OPENROUTER_API_KEY=sk-or-... node index.js
 curl localhost:8787/health
+# MOCK=1 node index.js  — без вызовов модели, для проверки UI
 ```
 
 ## Деплой на Hetzner (46.224.164.185)
-1. Скопировать папку `server/` на сервер (или склонировать репо и взять её).
+1. Скопировать `server/` на сервер.
 2. Создать `stylist-ai.env`:
-   - `ANTHROPIC_API_KEY` — можно переиспользовать из `~/secrets/server1/cyprus.env`.
-   - `APP_TOKEN` — придумать строку (та же пойдёт в PWA как `VITE_AI_TOKEN`).
+   - `OPENROUTER_API_KEY` — взять из `~/secrets/server1/cyprus.env` (там есть, с балансом).
+   - `APP_TOKEN` — можно пусто (занавес; для 1 пользователя достаточно CORS).
    - `ALLOW_ORIGINS=https://sizur.xyz,http://localhost:5173`
 3. `docker compose up -d --build` (слушает `127.0.0.1:8787`).
-4. Завести поддомен и TLS, например `ai.sizur.xyz`:
+4. Поддомен + TLS, например `ai.sizur.xyz`:
    - DNS: A-запись `ai.sizur.xyz → 46.224.164.185` (Spaceship).
-   - Реверс-прокси (nginx/Caddy) с Let's Encrypt → `proxy_pass http://127.0.0.1:8787;`
-     Caddy одной строкой: `ai.sizur.xyz { reverse_proxy 127.0.0.1:8787 }`
-5. В PWA выставить `VITE_AI_BASE=https://ai.sizur.xyz` и `VITE_AI_TOKEN=<APP_TOKEN>` при сборке
-   (или поправить дефолт в `src/lib/ai.js`), пересобрать и задеплоить.
+   - Caddy одной строкой: `ai.sizur.xyz { reverse_proxy 127.0.0.1:8787 }`
+5. PWA уже смотрит на `https://ai.sizur.xyz` по умолчанию — после шагов 1–4 ИИ заработает
+   без пересборки фронта (если `APP_TOKEN` пустой). Если задашь токен — собрать PWA
+   с `VITE_AI_TOKEN=<токен>`.
+
+## Стоимость
+claude-opus-4.8 ($5/$25 за 1M ток.). Один вызов «собери лук» ≈ 10–12k входных
+(гардероб кэшируется у Anthropic) + ~0.3k выход → центы. Для 1 пользователя пару раз
+в неделю — копейки. Хочешь дешевле — `AI_MODEL=anthropic/claude-sonnet-4.6`.
 
 ## Безопасность
-- `APP_TOKEN` виден в клиентском бандле (PWA публичная) — это занавес от случайных, не замок.
-  Настоящая защита доступа к ИИ — серверный rate-limit/квоты. Для 1 пользователя ок.
-- CORS ограничен `ALLOW_ORIGINS`. Контейнер слушает только loopback; наружу — через TLS-прокси.
+- Контейнер слушает только loopback; наружу — через TLS-прокси. CORS ограничен `ALLOW_ORIGINS`.
+- `APP_TOKEN` виден в клиентском бандле (PWA публичная) — занавес, не замок. Реальная защита
+  от абуза ИИ — серверный rate-limit/квоты. Для одного пользователя не критично.

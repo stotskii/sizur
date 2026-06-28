@@ -1,26 +1,19 @@
-// Стиль — ИИ-стилист, прокси к Claude.
-// Держит ANTHROPIC_API_KEY на сервере; PWA (статика на GitHub Pages) ходит сюда.
-// Модель claude-opus-4-8, structured outputs, гардероб кэшируется (prompt caching).
+// Стиль — ИИ-стилист, прокси. Держит ключ на сервере; PWA (статика) ходит сюда.
+// По умолчанию OpenRouter → claude-opus-4.8 (та же модель Claude, биллинг OpenRouter).
+// Anthropic-аккаунт в cyprus.env пустой, OpenRouter — с балансом.
 import http from 'node:http'
-import Anthropic from '@anthropic-ai/sdk'
 
-const client = new Anthropic() // читает ANTHROPIC_API_KEY из окружения
-const MODEL = 'claude-opus-4-8'
+const AI_BASE = process.env.AI_BASE_URL || 'https://openrouter.ai/api/v1'
+const AI_KEY = process.env.OPENROUTER_API_KEY || process.env.AI_KEY || ''
+const MODEL = process.env.AI_MODEL || 'anthropic/claude-opus-4.8'
 const PORT = Number(process.env.PORT || 8787)
-const APP_TOKEN = process.env.APP_TOKEN || '' // общий токен от клиента (занавес, не замок)
+const APP_TOKEN = process.env.APP_TOKEN || ''
+const MOCK = process.env.MOCK === '1'
 const ALLOW_ORIGINS = (process.env.ALLOW_ORIGINS ||
   'https://sizur.xyz,http://localhost:5173,http://localhost:4173')
   .split(',').map((s) => s.trim())
 
-// ---------- helpers ----------
-const json = (res, code, obj, origin) => {
-  res.writeHead(code, {
-    'content-type': 'application/json; charset=utf-8',
-    ...cors(origin),
-  })
-  res.end(JSON.stringify(obj))
-}
-
+// ---------- http helpers ----------
 function cors(origin) {
   const allow = ALLOW_ORIGINS.includes(origin) ? origin : ALLOW_ORIGINS[0]
   return {
@@ -30,43 +23,27 @@ function cors(origin) {
     'vary': 'origin',
   }
 }
-
+const json = (res, code, obj, origin) => {
+  res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', ...cors(origin) })
+  res.end(JSON.stringify(obj))
+}
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = ''
-    req.on('data', (c) => {
-      data += c
-      if (data.length > 2_000_000) req.destroy() // ~2MB guard
-    })
-    req.on('end', () => {
-      try {
-        resolve(data ? JSON.parse(data) : {})
-      } catch (e) {
-        reject(e)
-      }
-    })
+    req.on('data', (c) => { data += c; if (data.length > 2_000_000) req.destroy() })
+    req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}) } catch (e) { reject(e) } })
     req.on('error', reject)
   })
 }
 
-// Compact, deterministic catalog (sorted → stable prefix → prompt-cache hits).
+// ---------- prompt building ----------
 function catalogLines(items) {
-  return items
-    .slice()
-    .sort((a, b) => (a.guid < b.guid ? -1 : 1))
-    .map((i) => {
-      const colors = (i.colors || [])
-        .map((c) => (typeof c === 'string' ? c : c.rounded || c.hex))
-        .filter(Boolean)
-        .slice(0, 3)
-        .join('/')
-      const seasons = (i.seasons || []).join(',') || 'всесезон'
-      const tag = i.archived ? ' [на выброс]' : ''
-      return `${i.guid} | ${i.category} | ${i.type}${i.brand ? ' · ' + i.brand : ''} | ${seasons} | #${colors || '?'}${tag}`
-    })
-    .join('\n')
+  return items.slice().sort((a, b) => (a.guid < b.guid ? -1 : 1)).map((i) => {
+    const colors = (i.colors || []).map((c) => (typeof c === 'string' ? c : c.rounded || c.hex)).filter(Boolean).slice(0, 3).join('/')
+    const seasons = (i.seasons || []).join(',') || 'всесезон'
+    return `${i.guid} | ${i.category} | ${i.type}${i.brand ? ' · ' + i.brand : ''} | ${seasons} | #${colors || '?'}${i.archived ? ' [на выброс]' : ''}`
+  }).join('\n')
 }
-
 function dnaBlock(dna = {}) {
   return [
     `Палитра: ${dna.palette || 'приглушённые «сложные» светлые тона — пудра, серо-голубой, серо-зелёный, бордо-шоколад'}`,
@@ -74,7 +51,6 @@ function dnaBlock(dna = {}) {
     `Бренды/тир: ${dna.brands || 'quiet-luxury — COS, Massimo Dutti, Margiela, Acne, Lululemon'}`,
   ].join('\n- ')
 }
-
 function systemPrompt(items, dna) {
   return `Ты — личный стилист Екатерины. Её эстетика — тихий люкс, elevated-casual, спокойные приглушённые тона. Главный принцип: ЕДИНЫЙ узнаваемый стиль — согласованность палитры и силуэта важнее разнообразия.
 
@@ -89,63 +65,42 @@ ${catalogLines(items)}
 - Цельный образ = низ+верх (или платье) + обувь, обычно сумка, по желанию верхняя одежда/аксессуар.
 - Держи единую палитру и силуэт; не мешай спорт и вечер без причины.
 - Не используй вещи с пометкой [на выброс].
-- Отвечай по-русски, кратко и по делу. Возвращай строго JSON по заданной схеме.`
+- Отвечай по-русски, кратко. Возвращай ТОЛЬКО валидный JSON, без markdown и пояснений вокруг.`
 }
 
-const BUILD_SCHEMA = {
-  type: 'object',
-  properties: {
-    name: { type: 'string', description: 'короткое название образа, 1-3 слова' },
-    itemGuids: { type: 'array', items: { type: 'string' }, description: 'guid вещей образа, 4-7 штук' },
-    rationale: { type: 'string', description: '1-2 предложения, почему это в её стиле' },
-  },
-  required: ['name', 'itemGuids', 'rationale'],
-  additionalProperties: false,
-}
-
-const CHECK_SCHEMA = {
-  type: 'object',
-  properties: {
-    verdict: { type: 'string', enum: ['in_style', 'neutral', 'off'] },
-    score: { type: 'integer', description: '0-100, насколько в её едином стиле' },
-    dimensions: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          name: { type: 'string', description: 'палитра | силуэт | формальность | тир бренда' },
-          verdict: { type: 'string', enum: ['good', 'neutral', 'off'] },
-          note: { type: 'string' },
-        },
-        required: ['name', 'verdict', 'note'],
-        additionalProperties: false,
-      },
+async function callModel({ system, user, maxTokens = 2000 }) {
+  const res = await fetch(`${AI_BASE}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${AI_KEY}`,
+      'content-type': 'application/json',
+      'http-referer': 'https://sizur.xyz',
+      'x-title': 'Stylist (sizur.xyz)',
     },
-    summary: { type: 'string', description: '1-2 предложения вердикта по-русски' },
-  },
-  required: ['verdict', 'score', 'dimensions', 'summary'],
-  additionalProperties: false,
-}
-
-async function callClaude({ items, dna, userText, schema, effort = 'medium' }) {
-  const resp = await client.messages.create({
-    model: MODEL,
-    max_tokens: 6000,
-    thinking: { type: 'adaptive' },
-    output_config: { effort, format: { type: 'json_schema', schema } },
-    system: [
-      { type: 'text', text: systemPrompt(items, dna), cache_control: { type: 'ephemeral' } },
-    ],
-    messages: [{ role: 'user', content: userText }],
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: maxTokens,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+    }),
   })
-  if (resp.stop_reason === 'refusal') throw new Error('refusal')
-  const text = resp.content.find((b) => b.type === 'text')?.text || '{}'
-  return { data: JSON.parse(text), usage: resp.usage }
+  const j = await res.json().catch(() => ({}))
+  if (!res.ok || j.error) throw new Error(j.error?.message || `HTTP ${res.status}`)
+  const text = j.choices?.[0]?.message?.content || '{}'
+  return parseJson(text)
+}
+function parseJson(t) {
+  try { return JSON.parse(t) } catch {
+    const m = t.match(/\{[\s\S]*\}/)
+    if (m) return JSON.parse(m[0])
+    throw new Error('модель вернула не JSON')
+  }
 }
 
 // ---------- routes ----------
-const MOCK = process.env.MOCK === '1' // local UI testing without spending credits
-
 async function handleBuild(body) {
   const items = body.items || []
   const brief = (body.brief || '').slice(0, 300)
@@ -153,74 +108,61 @@ async function handleBuild(body) {
   if (MOCK) {
     const pick = (cat) => items.find((i) => i.category === cat && !i.archived)?.guid
     const guids = [pick('Одежда'), pick('Обувь'), pick('Аксессуары'), pick('Головные уборы')]
-      .concat(items.filter((i) => i.category === 'Одежда' && !i.archived).slice(1, 3).map((i) => i.guid))
-      .filter(Boolean)
-    return { name: 'Лёгкий городской', itemGuids: [...new Set(guids)].slice(0, 6), rationale: '(MOCK) Спокойная пудровая палитра, wide-leg силуэт — ровно ваш единый стиль.' }
+      .concat(items.filter((i) => i.category === 'Одежда' && !i.archived).slice(1, 3).map((i) => i.guid)).filter(Boolean)
+    return { name: 'Лёгкий городской', itemGuids: [...new Set(guids)].slice(0, 6), rationale: '(MOCK) Спокойная пудровая палитра, wide-leg силуэт.' }
   }
-  const userText = `Собери ОДИН цельный образ из гардероба${brief ? ` для: ${brief}` : ''}${season ? `, сезон: ${season}` : ''}. 4–7 вещей. Верни name, itemGuids (только guid из списка), rationale.`
-  const { data, usage } = await callClaude({ items, dna: body.styleDNA, userText, schema: BUILD_SCHEMA, effort: 'medium' })
-  // keep only guids that really exist (guard against hallucinations)
+  const user = `Собери ОДИН цельный образ из гардероба${brief ? ` для: ${brief}` : ''}${season ? `, сезон: ${season}` : ''}. 4–7 вещей.
+Верни ТОЛЬКО JSON вида: {"name": "короткое название", "itemGuids": ["guid", ...только из списка], "rationale": "1-2 предложения почему это в её стиле"}.`
+  const data = await callModel({ system: systemPrompt(items, body.styleDNA), user, maxTokens: 1500 })
   const valid = new Set(items.map((i) => i.guid))
   data.itemGuids = (data.itemGuids || []).filter((g) => valid.has(g)).slice(0, 8)
-  return { ...data, usage }
+  return data
 }
 
 async function handleCheck(body) {
   const items = body.items || []
-  const outfit = body.outfit || [] // [{guid,type,brand,colors,seasons}]
+  const outfit = body.outfit || []
   if (MOCK) {
     return {
       verdict: 'in_style', score: 82,
       dimensions: [
-        { name: 'палитра', verdict: 'good', note: 'спокойные приглушённые тона, всё в гамме' },
-        { name: 'силуэт', verdict: 'good', note: 'wide-leg низ + мягкий верх — ваш силуэт' },
-        { name: 'формальность', verdict: 'neutral', note: 'elevated-casual, чуть на каждый день' },
+        { name: 'палитра', verdict: 'good', note: 'спокойные приглушённые тона' },
+        { name: 'силуэт', verdict: 'good', note: 'wide-leg низ + мягкий верх' },
+        { name: 'формальность', verdict: 'neutral', note: 'elevated-casual' },
         { name: 'тир бренда', verdict: 'good', note: 'quiet-luxury, согласованно' },
       ],
-      summary: '(MOCK) Цельный образ в вашем едином стиле, мелкий минус по формальности.',
+      summary: '(MOCK) Цельный образ в вашем стиле.',
     }
   }
-  const lines = outfit
-    .map((o) => `- ${o.type}${o.brand ? ' · ' + o.brand : ''} (${(o.colors || []).map((c) => (typeof c === 'string' ? c : c.rounded || c.hex)).filter(Boolean).join('/')})`)
-    .join('\n')
-  const userText = `Оцени, насколько ЭТОТ образ соответствует её единому стилю. Разбери по осям: палитра, силуэт, формальность, тир бренда. Верни verdict, score (0-100), dimensions, summary.\n\nОБРАЗ:\n${lines}`
-  const { data, usage } = await callClaude({ items, dna: body.styleDNA, userText, schema: CHECK_SCHEMA, effort: 'high' })
-  return { ...data, usage }
+  const lines = outfit.map((o) => `- ${o.type}${o.brand ? ' · ' + o.brand : ''} (${(o.colors || []).map((c) => (typeof c === 'string' ? c : c.rounded || c.hex)).filter(Boolean).join('/')})`).join('\n')
+  const user = `Оцени, насколько ЭТОТ образ соответствует её единому стилю — по осям: палитра, силуэт, формальность, тир бренда.
+Верни ТОЛЬКО JSON вида: {"verdict": "in_style"|"neutral"|"off", "score": 0-100, "dimensions": [{"name": "палитра"|"силуэт"|"формальность"|"тир бренда", "verdict": "good"|"neutral"|"off", "note": "коротко"}], "summary": "1-2 предложения"}.
+
+ОБРАЗ:
+${lines}`
+  return callModel({ system: systemPrompt(items, body.styleDNA), user, maxTokens: 1500 })
 }
 
 // ---------- server ----------
 const server = http.createServer(async (req, res) => {
   const origin = req.headers.origin || ''
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204, cors(origin))
-    return res.end()
-  }
+  if (req.method === 'OPTIONS') { res.writeHead(204, cors(origin)); return res.end() }
   const url = req.url || '/'
   if (req.method === 'GET' && url === '/health') {
-    return json(res, 200, { ok: true, model: MODEL }, origin)
+    return json(res, 200, { ok: true, model: MODEL, base: AI_BASE, hasKey: !!AI_KEY }, origin)
   }
   if (req.method !== 'POST') return json(res, 404, { error: 'not found' }, origin)
-
-  if (APP_TOKEN && req.headers['x-app-token'] !== APP_TOKEN) {
-    return json(res, 401, { error: 'unauthorized' }, origin)
-  }
+  if (APP_TOKEN && req.headers['x-app-token'] !== APP_TOKEN) return json(res, 401, { error: 'unauthorized' }, origin)
 
   let body
-  try {
-    body = await readBody(req)
-  } catch {
-    return json(res, 400, { error: 'bad json' }, origin)
-  }
-
+  try { body = await readBody(req) } catch { return json(res, 400, { error: 'bad json' }, origin) }
   try {
     if (url === '/stylist/build') return json(res, 200, await handleBuild(body), origin)
     if (url === '/stylist/check') return json(res, 200, await handleCheck(body), origin)
     return json(res, 404, { error: 'not found' }, origin)
   } catch (e) {
-    const msg = e?.message === 'refusal' ? 'ИИ отклонил запрос' : 'ошибка ИИ'
     console.error('error on', url, ':', e?.message || e)
-    return json(res, 502, { error: msg }, origin)
+    return json(res, 502, { error: 'ошибка ИИ: ' + (e?.message || 'unknown') }, origin)
   }
 })
-
-server.listen(PORT, () => console.log(`stylist-ai-proxy on :${PORT} (model ${MODEL})`))
+server.listen(PORT, () => console.log(`stylist-ai-proxy on :${PORT} (${MODEL} via ${AI_BASE})`))
