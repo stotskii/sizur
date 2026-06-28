@@ -98,14 +98,16 @@ function callCodex({ system, user }) {
   const prompt = `${system}\n\n${user}\n\nВыведи ТОЛЬКО валидный JSON-объект, без markdown и текста вокруг.`
   const args = ['exec', ...CODEX_EXTRA]
   if (MODEL) args.push('-m', MODEL)
-  args.push(prompt)
+  // codex exec в неинтерактиве читает промпт из stdin — подаём туда, не аргументом.
   return new Promise((resolve, reject) => {
-    execFile(CODEX_BIN, args, { timeout: 150_000, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
+    const child = execFile(CODEX_BIN, args, { timeout: 150_000, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
       const out = `${stdout || ''}\n${stderr || ''}`
       try { resolve(parseJson(out)) } catch {
-        reject(new Error('codex дал не JSON: ' + (err ? String(err.message).slice(0, 160) : out.slice(-200))))
+        reject(new Error('codex дал не JSON: ' + (err ? String(err.message).slice(0, 160) : out.slice(-300))))
       }
     })
+    child.stdin.write(prompt)
+    child.stdin.end()
   })
 }
 
