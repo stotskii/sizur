@@ -156,6 +156,13 @@ button { font-family: inherit; cursor: pointer; }
 .empty-state .empty-emoji { font-size: 32px; margin-bottom: 8px; opacity: .65; }
 .empty-state p { margin: 0 0 14px; font-size: 14px; }
 
+/* consistent tactile press feedback on primary action buttons */
+.save-cta, .primary, .hero-actions button, .ghost-btn, .save-btn {
+  transition: transform .09s ease, background .12s, color .12s;
+}
+.save-cta:active, .primary:active, .hero-actions button:active,
+.ghost-btn:active, .save-btn:active { transform: scale(.97); }
+
 /* ---- outfit gallery ---- */
 .grid.outfits { grid-template-columns: repeat(2, 1fr); }
 .ocard .thumb { aspect-ratio: 3 / 4; }
