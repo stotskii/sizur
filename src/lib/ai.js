@@ -10,6 +10,7 @@ const TOKEN = import.meta.env.VITE_AI_TOKEN || ''
 function compactItems() {
   return data.items.map((i) => ({
     guid: i.guid,
+    name: i.name || i.type,
     category: i.category,
     type: i.type,
     brand: i.brand || null,
@@ -17,6 +18,26 @@ function compactItems() {
     colors: (i.colors || []).map((c) => c.rounded || c.hex).filter(Boolean).slice(0, 2),
     archived: !!i.archived,
   }))
+}
+
+// The model sometimes echoes item GUIDs in its prose. Replace any GUID in
+// human-facing text with the item's readable name so the user never sees raw IDs.
+const GUID_RE = /[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}/g
+function guidToName(guid) {
+  const it = data.items.find((i) => i.guid === guid)
+  return it ? it.name || it.type || 'вещь' : null
+}
+const deGuid = (s) =>
+  typeof s === 'string' ? s.replace(GUID_RE, (g) => guidToName(g) || 'вещь') : s
+function deGuidDeep(x) {
+  if (typeof x === 'string') return deGuid(x)
+  if (Array.isArray(x)) return x.map(deGuidDeep)
+  if (x && typeof x === 'object') {
+    const o = {}
+    for (const k in x) o[k] = deGuidDeep(x[k])
+    return o
+  }
+  return x
 }
 
 function styleDNA() {
@@ -44,7 +65,11 @@ async function post(path, body) {
 }
 
 export async function buildLook({ brief = '', season = '' } = {}) {
-  return post('/stylist/build', { items: compactItems(), styleDNA: styleDNA(), brief, season })
+  const look = await post('/stylist/build', { items: compactItems(), styleDNA: styleDNA(), brief, season })
+  // sanitize only human-facing text; keep itemGuids intact for layout mapping
+  if (look && look.rationale) look.rationale = deGuid(look.rationale)
+  if (look && look.name) look.name = deGuid(look.name)
+  return look
 }
 
 export async function checkOutfit(objects) {
@@ -54,12 +79,15 @@ export async function checkOutfit(objects) {
     .filter(Boolean)
     .map((i) => ({
       guid: i.guid,
+      name: i.name || i.type,
       type: i.type,
       brand: i.brand || null,
       colors: (i.colors || []).map((c) => c.rounded || c.hex).filter(Boolean).slice(0, 2),
       seasons: i.seasons || [],
     }))
-  return post('/stylist/check', { items: compactItems(), styleDNA: styleDNA(), outfit })
+  const v = await post('/stylist/check', { items: compactItems(), styleDNA: styleDNA(), outfit })
+  // verdict is all prose (no guid arrays) — scrub any echoed IDs everywhere
+  return deGuidDeep(v)
 }
 
 function loadDims(url) {
