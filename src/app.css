@@ -139,6 +139,14 @@ button { font-family: inherit; cursor: pointer; }
 }
 .card .meta .brand { font-size: 11px; color: var(--muted); margin-top: 1px; }
 .card.dim { opacity: .45; }
+/* tactile press feedback on tappable cards */
+.card { transition: transform .09s ease; }
+.card:active { transform: scale(.97); }
+
+/* friendly empty state (e.g. filters with no results) */
+.empty-state { text-align: center; padding: 44px 24px; color: var(--muted); }
+.empty-state .empty-emoji { font-size: 32px; margin-bottom: 8px; opacity: .65; }
+.empty-state p { margin: 0 0 14px; font-size: 14px; }
 
 /* ---- outfit gallery ---- */
 .grid.outfits { grid-template-columns: repeat(2, 1fr); }

@@ -77,8 +77,16 @@
   {#if hasFilter}· <button class="chip reset" style="padding:2px 8px" onclick={reset}>сбросить</button>{/if}
 </div>
 
-<div class="grid">
-  {#each filtered as item (item.guid)}
-    <ItemCard {item} onclick={() => (ui.detailItem = item)} />
-  {/each}
-</div>
+{#if filtered.length}
+  <div class="grid">
+    {#each filtered as item (item.guid)}
+      <ItemCard {item} onclick={() => (ui.detailItem = item)} />
+    {/each}
+  </div>
+{:else}
+  <div class="empty-state">
+    <div class="empty-emoji">🔍</div>
+    <p>Ничего не нашлось по фильтрам</p>
+    <button class="chip on" onclick={reset}>Сбросить фильтры</button>
+  </div>
+{/if}
