@@ -4,7 +4,7 @@
 // the URL. For real protection, host behind server auth.
 //
 // >>> CHANGE THE PIN HERE <<<
-export const ACCESS_PIN = '5683'
+export const ACCESS_PIN = '5719'
 
 const KEY = 'stylist_unlocked'
 
