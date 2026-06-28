@@ -14,6 +14,12 @@ OpenRouter — на реальных вызовах):
 
 Сменить модель внутри провайдера — `AI_MODEL`. Промпты одинаковы для всех.
 
+**`AI_PROVIDER=codex`** — по подписке ChatGPT через официальный CLI `codex exec` (Sign in with
+ChatGPT). Не HTTP, а shell-out в codex; на сервере должен быть установлен `codex` и сделан
+`codex login` твоей подпиской. Флаги codex задаются `CODEX_ARGS`, модель — `CODEX_MODEL`/`AI_MODEL`.
+Не проверено отсюда (codex не установлен) — тестировать на сервере. Тяжелее/медленнее HTTP-провайдеров
+и юзает кодинг-агент с песочницей как движок; для этой задачи overkill. См. ниже.
+
 ## Эндпоинты
 - `GET /health` → `{ ok, model, base, hasKey }`
 - `POST /stylist/build` — «собери лук». `{ items[], styleDNA, brief?, season? }` → `{ name, itemGuids[], rationale }`
@@ -44,6 +50,21 @@ curl localhost:8787/health
 5. PWA уже смотрит на `https://ai.sizur.xyz` по умолчанию — после шагов 1–4 ИИ заработает
    без пересборки фронта (если `APP_TOKEN` пустой). Если задашь токен — собрать PWA
    с `VITE_AI_TOKEN=<токен>`.
+
+## Вариант: подписка ChatGPT через Codex (`AI_PROVIDER=codex`)
+Не HTTP, а shell-out в официальный `codex exec`. Прокси запускать **на хосте** (где codex
+установлен и залогинен), не в Docker.
+```bash
+npm i -g @openai/codex            # или brew install codex
+codex login                       # вход твоей подпиской ChatGPT (headless: codex login --help)
+cd sizur/server
+AI_PROVIDER=codex CODEX_MODEL=gpt-5-codex PORT=8787 \
+  ALLOW_ORIGINS=https://sizur.xyz node index.js
+curl localhost:8787/health        # provider: codex
+```
+Затем тот же Caddy `ai.sizur.xyz { reverse_proxy 127.0.0.1:8787 }`. Флаги codex могут отличаться
+по версии — правятся через `CODEX_ARGS`. Минусы: медленнее, кодинг-агент с песочницей как движок,
+ToS-серость (OpenAI может троттлить app-бэкенд на подписке). Выгоды над OpenRouter нет.
 
 ## Стоимость
 claude-opus-4.8 ($5/$25 за 1M ток.). Один вызов «собери лук» ≈ 10–12k входных

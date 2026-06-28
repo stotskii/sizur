@@ -5,6 +5,7 @@
 //   openrouter → anthropic/claude-opus-4.8 (OPENROUTER_API_KEY)
 import http from 'node:http'
 import fs from 'node:fs'
+import { execFile } from 'node:child_process'
 
 const PROVIDER = process.env.AI_PROVIDER || 'openrouter'
 const DEFAULTS = {
@@ -14,6 +15,8 @@ const DEFAULTS = {
   openai: { model: 'gpt-4.1', base: 'https://api.openai.com/v1', key: process.env.OPENAI_API_KEY },
   openrouter: { model: 'anthropic/claude-opus-4.8', base: 'https://openrouter.ai/api/v1', key: process.env.OPENROUTER_API_KEY },
 }
+// codex — официальный CLI `codex exec` по подписке ChatGPT (Sign in with ChatGPT).
+DEFAULTS.codex = { model: process.env.CODEX_MODEL || 'gpt-5-codex', base: '', key: null }
 const cfg = DEFAULTS[PROVIDER] || DEFAULTS.openrouter
 const MODEL = process.env.AI_MODEL || cfg.model
 const AI_BASE = process.env.AI_BASE_URL || cfg.base
@@ -81,9 +84,28 @@ ${catalogLines(items)}
 }
 
 async function callModel(args) {
+  if (PROVIDER === 'codex') return callCodex(args)
   if (PROVIDER === 'anthropic-oauth') return callAnthropicOAuth(args)
   if (PROVIDER === 'anthropic') return callAnthropic(args)
   return callOpenAICompat(args)
+}
+
+// Codex CLI (`codex exec`) по подписке ChatGPT. Нужен установленный codex + `codex login`.
+// Флаги могут отличаться по версии codex — правятся через CODEX_ARGS (через пробел).
+const CODEX_BIN = process.env.CODEX_BIN || 'codex'
+const CODEX_EXTRA = (process.env.CODEX_ARGS || '--skip-git-repo-check --sandbox read-only').split(' ').filter(Boolean)
+function callCodex({ system, user }) {
+  const prompt = `${system}\n\n${user}\n\nВыведи ТОЛЬКО валидный JSON-объект, без markdown и текста вокруг.`
+  const args = ['exec', ...CODEX_EXTRA]
+  if (MODEL) args.push('-m', MODEL)
+  args.push(prompt)
+  return new Promise((resolve, reject) => {
+    execFile(CODEX_BIN, args, { timeout: 150_000, maxBuffer: 12 * 1024 * 1024 }, (err, stdout, stderr) => {
+      const out = stdout || ''
+      if (err && !out) return reject(new Error('codex: ' + String(stderr || err.message).slice(0, 200)))
+      try { resolve(parseJson(out)) } catch (e) { reject(new Error('codex дал не JSON: ' + out.slice(-200))) }
+    })
+  })
 }
 
 // ---- Claude по подписке (OAuth, как Claude Code) ----
