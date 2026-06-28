@@ -74,7 +74,9 @@ button { font-family: inherit; cursor: pointer; }
 }
 /* fade the right edge of horizontally-scrollable chip rows as a scroll hint
    (not the wrapping season row inside the item sheet) */
-.chips:not(.wrap) {
+.chips:not(.wrap),
+.mini-row,
+.hero-items {
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
   mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
 }
