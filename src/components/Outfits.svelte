@@ -1,11 +1,12 @@
 <script>
   import { data } from '../lib/store.svelte.js'
-  import { outfitThumb } from '../lib/catalog.js'
-  import { ui } from '../lib/state.svelte.js'
+  import { outfitThumbSmall } from '../lib/catalog.js'
+  import { ui, vt } from '../lib/state.svelte.js'
+  import { prefetchOutfit } from '../lib/prefetch.js'
 
   function open(o) {
     // edit a draft copy, not the live store object
-    ui.editorOutfit = { ...o, objects: o.objects.map((ob) => ({ ...ob })) }
+    vt(() => (ui.editorOutfit = { ...o, objects: o.objects.map((ob) => ({ ...ob })) }))
   }
 </script>
 
@@ -19,10 +20,10 @@
 
 <div class="grid outfits">
   {#each data.outfits as o (o.guid)}
-    <button class="card ocard" onclick={() => open(o)}>
+    <button class="card ocard" onclick={() => open(o)} onpointerdown={() => prefetchOutfit(o)}>
       <div class="thumb">
-        {#if outfitThumb(o)}
-          <img src={outfitThumb(o)} alt={o.name} loading="lazy" />
+        {#if outfitThumbSmall(o)}
+          <img src={outfitThumbSmall(o)} alt={o.name} loading="lazy" decoding="async" />
         {/if}
       </div>
       <div class="meta">

@@ -2,7 +2,7 @@
   import { ui, toast } from '../lib/state.svelte.js'
   import { data, patchItem } from '../lib/store.svelte.js'
   import { saveItem } from '../lib/db.js'
-  import { itemImg, SEASONS, SEASON_ORDER, outfitThumb } from '../lib/catalog.js'
+  import { itemImg, SEASONS, SEASON_ORDER, outfitThumbSmall } from '../lib/catalog.js'
 
   const item = ui.detailItem
 
@@ -92,7 +92,7 @@
           <div class="mini-row">
             {#each inOutfits.slice(0, 12) as o (o.guid)}
               <button class="mini" onclick={() => { ui.detailItem = null; ui.editorOutfit = { ...o, objects: o.objects.map((x) => ({ ...x })) } }}>
-                <img src={outfitThumb(o)} alt={o.name} loading="lazy" />
+                <img src={outfitThumbSmall(o)} alt={o.name} loading="lazy" />
               </button>
             {/each}
           </div>

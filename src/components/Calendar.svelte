@@ -3,7 +3,7 @@
   import { data } from '../lib/store.svelte.js'
   import { ui, toast } from '../lib/state.svelte.js'
   import { getCalendar, setCalendarEntry, removeCalendarEntry } from '../lib/db.js'
-  import { outfitThumb } from '../lib/catalog.js'
+  import { outfitThumbSmall } from '../lib/catalog.js'
 
   const WD = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
   const MON = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь']
@@ -74,7 +74,7 @@
           <button class="cal-cell" class:has={!!e} onclick={() => (pickDate = ds)}>
             <span class="dn">{d}</span>
             {#if e && outfitsById.get(e.outfitGuid)}
-              <img class="dthumb" src={outfitThumb(outfitsById.get(e.outfitGuid))} alt="" loading="lazy" />
+              <img class="dthumb" src={outfitThumbSmall(outfitsById.get(e.outfitGuid))} alt="" loading="lazy" />
             {/if}
           </button>
         {/if}
@@ -95,7 +95,7 @@
         <div class="grid outfits">
           {#each data.outfits as o (o.guid)}
             <button class="card ocard" onclick={() => assign(o)}>
-              <div class="thumb"><img src={outfitThumb(o)} alt={o.name} loading="lazy" /></div>
+              <div class="thumb"><img src={outfitThumbSmall(o)} alt={o.name} loading="lazy" /></div>
               <div class="meta"><div class="name">{o.name}</div></div>
             </button>
           {/each}

@@ -12,8 +12,33 @@ export default defineConfig({
       // The wardrobe images (~32MB) are precached so the app works fully offline
       // once installed to the home screen — single user, fixed dataset.
       workbox: {
+        // Precache the shell + all images (incl. the new ~320px grid thumbs) so
+        // the app is instant and fully offline once installed.
         globPatterns: ['**/*.{js,css,html,svg,webp,json}'],
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+        runtimeCaching: [
+          {
+            // 23MB background-removal WASM — too big to precache; cache on first
+            // use so the 2nd "Вещь с фото" is instant instead of re-downloading.
+            urlPattern: ({ url }) => url.pathname.endsWith('.wasm'),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'wasm-runtime',
+              expiration: { maxEntries: 8 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // @imgly background-removal model files (fetched from their CDN).
+            urlPattern: ({ url }) => /(^|\.)(staticimgly|imgly)\.com$/.test(url.hostname),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'imgly-models',
+              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 60 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
       manifest: {
         name: 'Стиль — гардероб и образы',

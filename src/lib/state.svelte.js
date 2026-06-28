@@ -1,3 +1,5 @@
+import { tick } from 'svelte'
+
 // Tiny global UI state using Svelte 5 runes. Mutate properties to stay reactive
 // across modules (don't reassign the export).
 export const ui = $state({
@@ -16,4 +18,20 @@ export function toast(msg) {
   ui.toast = msg
   clearTimeout(_t)
   _t = setTimeout(() => (ui.toast = ''), 2200)
+}
+
+/**
+ * Run a state mutation inside a View Transition for a smooth crossfade
+ * (used for opening/closing the canvas editor — masks its lazy-chunk load).
+ * Feature-detected: falls back to an instant mutation where unsupported.
+ */
+export function vt(mutate) {
+  if (typeof document === 'undefined' || !document.startViewTransition) {
+    mutate()
+    return
+  }
+  document.startViewTransition(async () => {
+    mutate()
+    await tick()
+  })
 }

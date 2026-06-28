@@ -1,7 +1,7 @@
 <script>
   import { data } from '../lib/store.svelte.js'
   import { ui } from '../lib/state.svelte.js'
-  import { itemImg } from '../lib/catalog.js'
+  import { itemThumb } from '../lib/catalog.js'
 
   const byGuid = $derived(new Map(data.items.map((i) => [i.guid, i])))
 
@@ -40,7 +40,7 @@
         <button class="suit-card" class:toss={isToss(s)} onclick={() => open(s)}>
           <div class="mosaic">
             {#each thumbs(s) as it}
-              <span class="cell"><img src={itemImg(it)} alt="" loading="lazy" /></span>
+              <span class="cell"><img src={itemThumb(it)} alt="" loading="lazy" /></span>
             {/each}
             {#if !thumbs(s).length}<span class="empty">пусто</span>{/if}
           </div>

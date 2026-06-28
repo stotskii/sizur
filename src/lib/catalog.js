@@ -13,17 +13,36 @@ export const picUrl = (g) => {
   return `${BASE}pictures/${g}.webp`
 }
 
+/**
+ * Small (~320px) grid preview of a migrated image. Generated offline into
+ * /pictures/thumbs/<guid>.webp (≈8× fewer pixels to decode than the full cutout
+ * — the single biggest perceived-speed win for the gallery). User-added cutouts
+ * (data:/blob:/http) have no derivative and pass through to the full image.
+ */
+export const thumbUrl = (g) => {
+  if (!g) return ''
+  if (g.startsWith('data:') || g.startsWith('blob:') || g.startsWith('http')) return g
+  return `${BASE}pictures/thumbs/${g}.webp`
+}
+
 /** Display image for an item: a user-added cutout if present, else its migrated picture. */
 export const itemImg = (item) => (item && (item.picData || picUrl(item.main_picture))) || ''
 
+/** Small grid preview of an item (use in grids/lists; itemImg for detail/editor). */
+export const itemThumb = (item) => (item && (item.picData || thumbUrl(item.main_picture))) || ''
+
 /**
- * Best available thumbnail for an outfit, in order:
+ * Best available FULL image for an outfit, in order:
  *  1. our freshly re-rendered thumb (after an edit)
  *  2. the clean collage we composited from transparent cutouts (col_*)
  *  3. the migrated GetWardrobe collage (last resort — has black item boxes)
  */
 export const outfitThumb = (o) =>
   (o && (o.thumbDataUrl || (o.collage && picUrl(o.collage)) || picUrl(o.picture))) || ''
+
+/** Small grid preview of an outfit (use in grids/lists; outfitThumb for the hero). */
+export const outfitThumbSmall = (o) =>
+  (o && (o.thumbDataUrl || (o.collage && thumbUrl(o.collage)) || thumbUrl(o.picture))) || ''
 
 export const SEASONS = {
   spring: 'Весна',

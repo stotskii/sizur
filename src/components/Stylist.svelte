@@ -1,7 +1,7 @@
 <script>
   import { data } from '../lib/store.svelte.js'
   import { ui, toast } from '../lib/state.svelte.js'
-  import { paletteWithShare, itemMatchesColor, SEASONS, SEASON_ORDER, outfitThumb } from '../lib/catalog.js'
+  import { paletteWithShare, itemMatchesColor, SEASONS, SEASON_ORDER, outfitThumbSmall } from '../lib/catalog.js'
   import { buildLook, lookToOutfit, checkOutfit } from '../lib/ai.js'
 
   const palette = $derived(paletteWithShare(data.items, 8))
@@ -129,7 +129,7 @@
         <div class="grid outfits">
           {#each data.outfits as o (o.guid)}
             <button class="card ocard" onclick={() => runCheck(o)}>
-              <div class="thumb"><img src={outfitThumb(o)} alt={o.name} loading="lazy" /></div>
+              <div class="thumb"><img src={outfitThumbSmall(o)} alt={o.name} loading="lazy" /></div>
               <div class="meta"><div class="name">{o.name}</div></div>
             </button>
           {/each}

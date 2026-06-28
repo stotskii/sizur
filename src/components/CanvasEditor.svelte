@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte'
   import Konva from 'konva'
-  import { ui, toast } from '../lib/state.svelte.js'
+  import { ui, toast, vt } from '../lib/state.svelte.js'
   import { saveOutfit } from '../lib/db.js'
   import { patchOutfit } from '../lib/store.svelte.js'
   import { picUrl } from '../lib/catalog.js'
@@ -213,11 +213,11 @@
     await saveOutfit(record)
     patchOutfit(JSON.parse(JSON.stringify(record)))
     toast(isNew ? 'Образ создан' : 'Образ сохранён')
-    ui.editorOutfit = null
+    vt(() => (ui.editorOutfit = null))
   }
   function close() {
     if (dirty && !confirm('Выйти без сохранения? Изменения не сохранятся.')) return
-    ui.editorOutfit = null
+    vt(() => (ui.editorOutfit = null))
   }
 
   let ro

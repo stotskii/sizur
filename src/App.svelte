@@ -10,7 +10,7 @@
   import Outfits from './components/Outfits.svelte'
   import Today from './components/Today.svelte'
   import Stylist from './components/Stylist.svelte'
-  import CanvasEditor from './components/CanvasEditor.svelte'
+  import { prefetchEditor } from './lib/prefetch.js'
   import ItemDetail from './components/ItemDetail.svelte'
   import Suitcases from './components/Suitcases.svelte'
   import SuitcaseDetail from './components/SuitcaseDetail.svelte'
@@ -45,7 +45,12 @@
 {:else if !ready}
   <div class="boot">Загрузка гардероба…</div>
 {:else if ui.editorOutfit}
-  <CanvasEditor />
+  {#await prefetchEditor()}
+    <div class="boot">Открываю редактор…</div>
+  {:then mod}
+    {@const Editor = mod.default}
+    <Editor />
+  {/await}
 {:else}
   <main class="screen">
     {#if ui.tab === 'wardrobe'}

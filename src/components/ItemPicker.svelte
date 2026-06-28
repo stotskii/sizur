@@ -1,6 +1,6 @@
 <script>
   import { data } from '../lib/store.svelte.js'
-  import { CATEGORY_ORDER, itemImg } from '../lib/catalog.js'
+  import { CATEGORY_ORDER, itemThumb } from '../lib/catalog.js'
 
   let { onpick, onclose } = $props()
 
@@ -30,7 +30,7 @@
         {#each filtered as item (item.guid)}
           <button class="card" onclick={() => onpick(item)}>
             <div class="thumb">
-              <img src={itemImg(item)} alt={item.name} loading="lazy" />
+              <img src={itemThumb(item)} alt={item.name} loading="lazy" />
             </div>
             <div class="meta"><div class="name">{item.name || item.type}</div></div>
           </button>

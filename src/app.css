@@ -250,7 +250,11 @@ button { font-family: inherit; cursor: pointer; }
   padding: 14px 18px 8px;
 }
 .sheet-head h3 { margin: 0; font-size: 17px; }
-.sheet-grid { overflow-y: auto; padding: 4px 14px 16px; }
+.sheet-grid { overflow-y: auto; padding: 4px 14px 16px; flex: 1 1 auto; min-height: 0; }
+/* In the flex-column sheet, the scrolling grid must take the slack — otherwise it
+   squeezes the header and filter row above it (chips got clipped). */
+.sheet-head { flex-shrink: 0; }
+.sheet > .chips { flex: 0 0 auto; }
 
 /* toast */
 .toast {
@@ -313,3 +317,18 @@ button { font-family: inherit; cursor: pointer; }
 .suit-meta .sub { color: var(--muted); font-size: 13px; margin-top: 3px; }
 
 .grid .dim { opacity: .45; }
+
+/* View Transitions: quick crossfade for opening/closing the canvas editor.
+   Short (180ms) so it reads as snappy, not sluggish; off for reduced-motion. */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 0.18s;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}

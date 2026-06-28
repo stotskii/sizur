@@ -1,6 +1,7 @@
 <script>
   import { data } from '../lib/store.svelte.js'
-  import { ui, toast } from '../lib/state.svelte.js'
+  import { ui, toast, vt } from '../lib/state.svelte.js'
+  import { prefetchOutfit, prefetchEditor } from '../lib/prefetch.js'
   import { setCalendarEntry, uid } from '../lib/db.js'
   import { outfitThumb, picUrl, SEASONS, currentSeason, isoDate } from '../lib/catalog.js'
 
@@ -31,10 +32,10 @@
     toast('Образ на сегодня отмечен')
   }
   function buildOwn() {
-    ui.editorOutfit = { guid: uid('outfit'), name: 'Новый образ', seasons: [season], picture: '', objects: [], isNew: true }
+    vt(() => (ui.editorOutfit = { guid: uid('outfit'), name: 'Новый образ', seasons: [season], picture: '', objects: [], isNew: true }))
   }
   function openHero() {
-    if (hero) ui.editorOutfit = { ...hero, objects: hero.objects.map((x) => ({ ...x })) }
+    if (hero) vt(() => (ui.editorOutfit = { ...hero, objects: hero.objects.map((x) => ({ ...x })) }))
   }
 </script>
 
@@ -45,7 +46,7 @@
 
 {#if hero}
   <div class="today-hero">
-    <button class="hero-collage" onclick={openHero} aria-label="Открыть образ">
+    <button class="hero-collage" onclick={openHero} onpointerdown={() => (hero ? prefetchOutfit(hero) : prefetchEditor())} aria-label="Открыть образ">
       <img src={outfitThumb(hero)} alt={hero.name} />
     </button>
     <div class="hero-name">{hero.name}</div>
@@ -60,7 +61,7 @@
     <div class="hero-actions">
       <button class="primary" onclick={wear}>Надеть</button>
       <button onclick={another}>Другой вариант</button>
-      <button onclick={buildOwn}>Собрать самой</button>
+      <button onclick={buildOwn} onpointerdown={() => prefetchEditor()}>Собрать самой</button>
     </div>
   </div>
 {:else}

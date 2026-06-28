@@ -1,7 +1,8 @@
 <script>
   import { data } from '../lib/store.svelte.js'
-  import { ui } from '../lib/state.svelte.js'
-  import { picUrl, outfitThumb } from '../lib/catalog.js'
+  import { ui, vt } from '../lib/state.svelte.js'
+  import { picUrl, outfitThumbSmall } from '../lib/catalog.js'
+  import { prefetchOutfit } from '../lib/prefetch.js'
   import ItemCard from './ItemCard.svelte'
 
   const s = ui.suitcase
@@ -17,7 +18,7 @@
 
   const close = () => { ui.screen = ''; ui.suitcase = null }
   function openOutfit(o) {
-    ui.editorOutfit = { ...o, objects: o.objects.map((x) => ({ ...x })) }
+    vt(() => (ui.editorOutfit = { ...o, objects: o.objects.map((x) => ({ ...x })) }))
   }
 </script>
 
@@ -49,8 +50,8 @@
     {:else}
       <div class="grid outfits">
         {#each outfits as o (o.guid)}
-          <button class="card ocard" onclick={() => openOutfit(o)}>
-            <div class="thumb"><img src={outfitThumb(o)} alt={o.name} loading="lazy" /></div>
+          <button class="card ocard" onclick={() => openOutfit(o)} onpointerdown={() => prefetchOutfit(o)}>
+            <div class="thumb"><img src={outfitThumbSmall(o)} alt={o.name} loading="lazy" decoding="async" /></div>
             <div class="meta"><div class="name">{o.name}</div></div>
           </button>
         {/each}
