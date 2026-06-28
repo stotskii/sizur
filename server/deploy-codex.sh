@@ -12,7 +12,7 @@ if [ -d sizur/.git ]; then (cd sizur && git pull --ff-only); else git clone http
 
 cat > /opt/stylist/sizur/server/stylist-ai.env <<'ENV'
 AI_PROVIDER=codex
-CODEX_MODEL=gpt-5-codex
+# CODEX_MODEL=  (пусто = дефолтная модель codex, проверено: gpt-5.5)
 PORT=8787
 ALLOW_ORIGINS=https://sizur.xyz
 APP_TOKEN=

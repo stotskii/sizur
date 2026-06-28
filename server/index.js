@@ -16,7 +16,7 @@ const DEFAULTS = {
   openrouter: { model: 'anthropic/claude-opus-4.8', base: 'https://openrouter.ai/api/v1', key: process.env.OPENROUTER_API_KEY },
 }
 // codex — официальный CLI `codex exec` по подписке ChatGPT (Sign in with ChatGPT).
-DEFAULTS.codex = { model: process.env.CODEX_MODEL || 'gpt-5-codex', base: '', key: null }
+DEFAULTS.codex = { model: process.env.CODEX_MODEL || '', base: '', key: null } // '' = дефолтная модель codex
 const cfg = DEFAULTS[PROVIDER] || DEFAULTS.openrouter
 const MODEL = process.env.AI_MODEL || cfg.model
 const AI_BASE = process.env.AI_BASE_URL || cfg.base
@@ -100,10 +100,11 @@ function callCodex({ system, user }) {
   if (MODEL) args.push('-m', MODEL)
   args.push(prompt)
   return new Promise((resolve, reject) => {
-    execFile(CODEX_BIN, args, { timeout: 150_000, maxBuffer: 12 * 1024 * 1024 }, (err, stdout, stderr) => {
-      const out = stdout || ''
-      if (err && !out) return reject(new Error('codex: ' + String(stderr || err.message).slice(0, 200)))
-      try { resolve(parseJson(out)) } catch (e) { reject(new Error('codex дал не JSON: ' + out.slice(-200))) }
+    execFile(CODEX_BIN, args, { timeout: 150_000, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
+      const out = `${stdout || ''}\n${stderr || ''}`
+      try { resolve(parseJson(out)) } catch {
+        reject(new Error('codex дал не JSON: ' + (err ? String(err.message).slice(0, 160) : out.slice(-200))))
+      }
     })
   })
 }
@@ -199,12 +200,24 @@ async function callOpenAICompat({ system, user, maxTokens = 2000 }) {
   const text = j.choices?.[0]?.message?.content || '{}'
   return parseJson(text)
 }
+// Достаёт ПОСЛЕДНИЙ валидный top-level JSON-объект из текста (codex печатает
+// хедер/эхо-промпта/warning вокруг ответа — берём именно ответ).
 function parseJson(t) {
-  try { return JSON.parse(t) } catch {
-    const m = t.match(/\{[\s\S]*\}/)
-    if (m) return JSON.parse(m[0])
-    throw new Error('модель вернула не JSON')
+  const s = (t || '').trim()
+  try { return JSON.parse(s) } catch {}
+  const spans = []
+  let depth = 0, start = -1, inStr = false, esc = false
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue }
+    if (c === '"') { inStr = true; continue }
+    if (c === '{') { if (depth === 0) start = i; depth++ }
+    else if (c === '}') { if (depth > 0 && --depth === 0 && start >= 0) { spans.push(s.slice(start, i + 1)); start = -1 } }
   }
+  for (let j = spans.length - 1; j >= 0; j--) {
+    try { return JSON.parse(spans[j]) } catch {}
+  }
+  throw new Error('модель вернула не JSON')
 }
 
 // ---------- routes ----------
