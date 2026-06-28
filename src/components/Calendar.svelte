@@ -22,6 +22,7 @@
   })
 
   const iso = (y, m, d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  const todayIso = iso(now.getFullYear(), now.getMonth(), now.getDate())
 
   const cells = $derived(
     (() => {
@@ -71,7 +72,7 @@
         {:else}
           {@const ds = iso(year, month, d)}
           {@const e = entries[ds]}
-          <button class="cal-cell" class:has={!!e} onclick={() => (pickDate = ds)}>
+          <button class="cal-cell" class:has={!!e} class:today={ds === todayIso} onclick={() => (pickDate = ds)}>
             <span class="dn">{d}</span>
             {#if e && outfitsById.get(e.outfitGuid)}
               <img class="dthumb" src={outfitThumbSmall(outfitsById.get(e.outfitGuid))} alt="" loading="lazy" />
@@ -117,6 +118,9 @@
   .cal-cell.empty { border: none; background: none; }
   .cal-cell .dn { position: absolute; top: 4px; left: 6px; font-size: 12px; color: var(--ink-2); z-index: 1; }
   .cal-cell.has .dn { color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+  .cal-cell.today { box-shadow: inset 0 0 0 2px var(--ink); }
+  .cal-cell.today .dn { font-weight: 700; color: var(--ink); }
+  .cal-cell.today.has .dn { color: #fff; }
   .dthumb { width: 100%; height: 100%; object-fit: cover; }
   .note { color: var(--muted); font-size: 12px; margin-top: 14px; text-align: center; }
 </style>
