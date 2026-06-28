@@ -30,8 +30,16 @@ export function vt(mutate) {
     mutate()
     return
   }
-  document.startViewTransition(async () => {
+  try {
+    const t = document.startViewTransition(async () => {
+      mutate()
+      await tick()
+    })
+    // A rapid second transition aborts the first; its .ready/.finished promises
+    // then reject with InvalidStateError. Swallow them — the DOM still updates.
+    t.ready?.catch(() => {})
+    t.finished?.catch(() => {})
+  } catch {
     mutate()
-    await tick()
-  })
+  }
 }
