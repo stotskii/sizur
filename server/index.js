@@ -349,10 +349,9 @@ async function callOpenAIImage({ prompt, dataUrl, personDataUrl }) {
   // примерка: фото человека первым (база), коллаж вещей — референсом
   if (tryon) files.push(fileFromDataUrl(personDataUrl, 'image[]', 'person'))
   files.push(fileFromDataUrl(dataUrl, tryon ? 'image[]' : 'image', 'outfit'))
-  const { body, boundary } = multipartBody(
-    { model: OPENAI_IMAGE_MODEL, prompt, size: IMAGE_SIZE, input_fidelity: 'high', quality: 'medium' },
-    files
-  )
+  const fields = { model: OPENAI_IMAGE_MODEL, prompt, size: IMAGE_SIZE, quality: 'medium' }
+  if (/gpt-image-1/.test(OPENAI_IMAGE_MODEL)) fields.input_fidelity = 'high' // только у gpt-image-1.x
+  const { body, boundary } = multipartBody(fields, files)
   const res = await fetch('https://api.openai.com/v1/images/edits', {
     method: 'POST',
     headers: { authorization: `Bearer ${OPENAI_IMAGE_KEY}`, 'content-type': `multipart/form-data; boundary=${boundary}` },
