@@ -26,6 +26,10 @@ const APP_TOKEN = process.env.APP_TOKEN || ''
 // Image-gen («Облагородить»): всегда Gemini «Nano Banana», независимо от текстового AI_PROVIDER.
 const GEMINI_KEY = process.env.GEMINI_API_KEY || ''
 const GEMINI_IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image'
+const OPENAI_IMAGE_KEY = process.env.OPENAI_IMAGE_API_KEY || process.env.OPENAI_API_KEY || ''
+// провайдер image-gen: openai (gpt-image-1) | gemini (nano banana). По умолч. — openai, если есть ключ.
+const IMAGE_PROVIDER = process.env.IMAGE_PROVIDER || (OPENAI_IMAGE_KEY ? 'openai' : 'gemini')
+const IMAGE_SIZE = process.env.IMAGE_SIZE || '1024x1536'
 const MOCK = process.env.MOCK === '1'
 const ALLOW_ORIGINS = (process.env.ALLOW_ORIGINS ||
   'https://sizur.xyz,http://localhost:5173,http://localhost:4173')
@@ -309,9 +313,45 @@ async function callGeminiImage({ prompt, dataUrl }) {
   return `data:${inl.mimeType || inl.mime_type || 'image/png'};base64,${inl.data}`
 }
 
+// gpt-image-1 edit (image-conditioned, input_fidelity=high сохраняет реальные вещи).
+function multipartBody(fields, file) {
+  const boundary = '----stylist' + Math.random().toString(36).slice(2)
+  const CRLF = '\r\n'
+  const parts = []
+  for (const [k, v] of Object.entries(fields)) {
+    parts.push(Buffer.from(`--${boundary}${CRLF}Content-Disposition: form-data; name="${k}"${CRLF}${CRLF}${v}${CRLF}`))
+  }
+  parts.push(Buffer.from(`--${boundary}${CRLF}Content-Disposition: form-data; name="${file.name}"; filename="${file.filename}"${CRLF}Content-Type: ${file.contentType}${CRLF}${CRLF}`))
+  parts.push(file.buffer)
+  parts.push(Buffer.from(`${CRLF}--${boundary}--${CRLF}`))
+  return { body: Buffer.concat(parts), boundary }
+}
+async function callOpenAIImage({ prompt, dataUrl }) {
+  if (!OPENAI_IMAGE_KEY) throw new Error('нет OPENAI_IMAGE_API_KEY на сервере')
+  const m = /^data:([^;]+);base64,(.+)$/s.exec(dataUrl || '')
+  if (!m) throw new Error('плохое изображение')
+  const { body, boundary } = multipartBody(
+    { model: 'gpt-image-1', prompt, size: IMAGE_SIZE, input_fidelity: 'high', quality: 'medium' },
+    { name: 'image', filename: 'outfit.png', contentType: 'image/png', buffer: Buffer.from(m[2], 'base64') }
+  )
+  const res = await fetch('https://api.openai.com/v1/images/edits', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${OPENAI_IMAGE_KEY}`, 'content-type': `multipart/form-data; boundary=${boundary}` },
+    body,
+  })
+  const j = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(j.error?.message || `OpenAI HTTP ${res.status}`)
+  const b64 = j.data?.[0]?.b64_json
+  if (!b64) throw new Error('OpenAI не вернул изображение')
+  return `data:image/png;base64,${b64}`
+}
+
 async function handleRender(body) {
-  const image = await callGeminiImage({ prompt: renderPrompt(body), dataUrl: body.image })
-  return { image }
+  const prompt = renderPrompt(body)
+  const image = IMAGE_PROVIDER === 'gemini'
+    ? await callGeminiImage({ prompt, dataUrl: body.image })
+    : await callOpenAIImage({ prompt, dataUrl: body.image })
+  return { image, provider: IMAGE_PROVIDER }
 }
 
 // ---------- server ----------
