@@ -255,7 +255,6 @@
     select(null)
     const img = exportForRender()
     if (!img) { toast('Добавьте вещи в образ'); return }
-    if (!modelPhoto) { pickPhoto(); return } // первый раз — попросим фото Екатерины
     rendering = true
     try {
       const { image } = await renderOutfit({ imageDataUrl: img, items: outfitItemsMeta(), mode, person: modelPhoto })
@@ -365,7 +364,7 @@
 {#if rendering}
   <div class="render-busy">
     <div class="r-spin"></div>
-    <div class="r-t">{modelPhoto ? 'Примеряю образ на вас…' : 'Облагораживаю образ…'}<br /><small>gpt-image-1 · ~минута</small></div>
+    <div class="r-t">Примеряю образ…<br /><small>~минута</small></div>
   </div>
 {/if}
 
@@ -374,8 +373,8 @@
     <div class="render-card" onclick={(e) => e.stopPropagation()} role="dialog" aria-label="Результат">
       <img src={renderUrl} alt="образ на модели" />
       <div class="render-hint">
-        {#if modelPhoto}На вашем фото · <button class="link" onclick={pickPhoto}>сменить</button> · <button class="link" onclick={removePhoto}>убрать</button>
-        {:else}На модели · <button class="link" onclick={pickPhoto}>примерить на себя</button>{/if}
+        {#if modelPhoto}Ваше фото · <button class="link" onclick={pickPhoto}>сменить</button> · <button class="link" onclick={removePhoto}>убрать</button>
+        {:else}На вашем фото · <button class="link" onclick={pickPhoto}>загрузить другое</button>{/if}
       </div>
       <div class="render-actions">
         <a class="rbtn" href={renderUrl} download="look.png">Скачать</a>

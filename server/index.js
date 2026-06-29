@@ -31,6 +31,17 @@ const OPENAI_IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2' // «
 // провайдер image-gen: openai (gpt-image-1) | gemini (nano banana). По умолч. — openai, если есть ключ.
 const IMAGE_PROVIDER = process.env.IMAGE_PROVIDER || (OPENAI_IMAGE_KEY ? 'openai' : 'gemini')
 const IMAGE_SIZE = process.env.IMAGE_SIZE || '1024x1536'
+// дефолтное фото владелицы для примерки (приватно на сервере; клиент может переопределить своим)
+const PERSON_PHOTO_FILE = process.env.PERSON_PHOTO_FILE || ''
+let DEFAULT_PERSON = ''
+try {
+  if (PERSON_PHOTO_FILE) {
+    const b = fs.readFileSync(PERSON_PHOTO_FILE)
+    const ext = (PERSON_PHOTO_FILE.split('.').pop() || '').toLowerCase()
+    const mime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg'
+    DEFAULT_PERSON = `data:${mime};base64,${b.toString('base64')}`
+  }
+} catch (e) { console.error('не удалось прочитать PERSON_PHOTO_FILE:', e.message) }
 const MOCK = process.env.MOCK === '1'
 const ALLOW_ORIGINS = (process.env.ALLOW_ORIGINS ||
   'https://sizur.xyz,http://localhost:5173,http://localhost:4173')
@@ -365,10 +376,11 @@ async function callOpenAIImage({ prompt, dataUrl, personDataUrl }) {
 }
 
 async function handleRender(body) {
-  const prompt = renderPrompt(body)
+  const person = body.person || DEFAULT_PERSON
+  const prompt = renderPrompt({ ...body, person })
   const image = IMAGE_PROVIDER === 'gemini'
     ? await callGeminiImage({ prompt, dataUrl: body.image })
-    : await callOpenAIImage({ prompt, dataUrl: body.image, personDataUrl: body.person })
+    : await callOpenAIImage({ prompt, dataUrl: body.image, personDataUrl: person })
   return { image, provider: IMAGE_PROVIDER }
 }
 
