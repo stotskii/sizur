@@ -211,7 +211,7 @@
   .dname { font-weight: 600; }
   .dnote { color: var(--ink-2); }
 
-  .ai-busy { position: fixed; inset: 0; max-width: 480px; margin: 0 auto; background: rgba(244,241,236,.86); backdrop-filter: blur(4px); display: grid; place-content: center; justify-items: center; gap: 16px; z-index: 250; }
+  .ai-busy { position: fixed; inset: 0; max-width: var(--app-w); margin: 0 auto; background: rgba(244,241,236,.86); backdrop-filter: blur(4px); display: grid; place-content: center; justify-items: center; gap: 16px; z-index: 250; }
   .spin { width: 34px; height: 34px; border: 3px solid var(--line); border-top-color: var(--ink); border-radius: 999px; animation: spin 0.9s linear infinite; }
   .busy-t { color: var(--ink-2); font-size: 14px; text-align: center; padding: 0 40px; }
   @keyframes spin { to { transform: rotate(360deg); } }

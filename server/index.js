@@ -282,6 +282,10 @@ function renderPrompt(body) {
   // ключевой приём (свежие гайды): сохранить идентичность вещей + назвать фактуру
   const preserve = "This is a fitting preview, not a redesign: preserve EACH garment's exact color, pattern, cut, fabric and proportions; do not add, remove or restyle items, and do not invent new garments."
   const itemsLine = items ? ` The outfit consists of: ${items}.` : ''
+  // примерка на фото владелицы: первое изображение — её фото, второе — коллаж её вещей
+  if (body.person) {
+    return `Photorealistic full-length fashion photo of the SAME woman shown in the first reference photo, dressed in the EXACT outfit shown in the second reference (a flat collage of her own garments).${itemsLine} Preserve her face, hairstyle, skin tone, age and body shape precisely — it must clearly be the same person, a natural likeness, not a different model. ${preserve} ${dna}; relaxed natural full-length pose, soft daylight, clean warm-neutral setting, 85mm, subtle film grain. 3:4, full-length, sharp focus on face and garments, no text, no watermark, natural hands.`
+  }
   if (mode === 'flatlay') {
     return `Studio fashion flat-lay of the exact garments shown, arranged elegantly on a warm linen surface with a few minimal props (a ceramic cup, a dried branch, fine gold jewelry).${itemsLine} ${preserve} Soft diffused overhead daylight, long gentle shadows, ${dna}. Editorial still-life, 4:5, ultra-detailed, no text, no watermark.`
   }
@@ -313,26 +317,39 @@ async function callGeminiImage({ prompt, dataUrl }) {
   return `data:${inl.mimeType || inl.mime_type || 'image/png'};base64,${inl.data}`
 }
 
-// gpt-image-1 edit (image-conditioned, input_fidelity=high сохраняет реальные вещи).
-function multipartBody(fields, file) {
+// gpt-image-1 edit (image-conditioned, input_fidelity=high сохраняет реальные вещи + лицо).
+function fileFromDataUrl(d, name, base) {
+  const m = /^data:([^;]+);base64,(.+)$/s.exec(d || '')
+  if (!m) throw new Error('плохое изображение')
+  const mime = m[1]
+  const ext = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : mime.includes('jpeg') || mime.includes('jpg') ? 'jpg' : 'png'
+  return { name, filename: `${base}.${ext}`, contentType: mime, buffer: Buffer.from(m[2], 'base64') }
+}
+function multipartBody(fields, files) {
   const boundary = '----stylist' + Math.random().toString(36).slice(2)
   const CRLF = '\r\n'
   const parts = []
   for (const [k, v] of Object.entries(fields)) {
     parts.push(Buffer.from(`--${boundary}${CRLF}Content-Disposition: form-data; name="${k}"${CRLF}${CRLF}${v}${CRLF}`))
   }
-  parts.push(Buffer.from(`--${boundary}${CRLF}Content-Disposition: form-data; name="${file.name}"; filename="${file.filename}"${CRLF}Content-Type: ${file.contentType}${CRLF}${CRLF}`))
-  parts.push(file.buffer)
-  parts.push(Buffer.from(`${CRLF}--${boundary}--${CRLF}`))
+  for (const f of files) {
+    parts.push(Buffer.from(`--${boundary}${CRLF}Content-Disposition: form-data; name="${f.name}"; filename="${f.filename}"${CRLF}Content-Type: ${f.contentType}${CRLF}${CRLF}`))
+    parts.push(f.buffer)
+    parts.push(Buffer.from(CRLF))
+  }
+  parts.push(Buffer.from(`--${boundary}--${CRLF}`))
   return { body: Buffer.concat(parts), boundary }
 }
-async function callOpenAIImage({ prompt, dataUrl }) {
+async function callOpenAIImage({ prompt, dataUrl, personDataUrl }) {
   if (!OPENAI_IMAGE_KEY) throw new Error('нет OPENAI_IMAGE_API_KEY на сервере')
-  const m = /^data:([^;]+);base64,(.+)$/s.exec(dataUrl || '')
-  if (!m) throw new Error('плохое изображение')
+  const tryon = !!personDataUrl
+  const files = []
+  // примерка: фото человека первым (база), коллаж вещей — референсом
+  if (tryon) files.push(fileFromDataUrl(personDataUrl, 'image[]', 'person'))
+  files.push(fileFromDataUrl(dataUrl, tryon ? 'image[]' : 'image', 'outfit'))
   const { body, boundary } = multipartBody(
     { model: 'gpt-image-1', prompt, size: IMAGE_SIZE, input_fidelity: 'high', quality: 'medium' },
-    { name: 'image', filename: 'outfit.png', contentType: 'image/png', buffer: Buffer.from(m[2], 'base64') }
+    files
   )
   const res = await fetch('https://api.openai.com/v1/images/edits', {
     method: 'POST',
@@ -350,7 +367,7 @@ async function handleRender(body) {
   const prompt = renderPrompt(body)
   const image = IMAGE_PROVIDER === 'gemini'
     ? await callGeminiImage({ prompt, dataUrl: body.image })
-    : await callOpenAIImage({ prompt, dataUrl: body.image })
+    : await callOpenAIImage({ prompt, dataUrl: body.image, personDataUrl: body.person })
   return { image, provider: IMAGE_PROVIDER }
 }
 

@@ -6,6 +6,7 @@
   import { patchOutfit, data } from '../lib/store.svelte.js'
   import { picUrl } from '../lib/catalog.js'
   import { renderOutfit } from '../lib/ai.js'
+  import { getModelPhoto, setModelPhoto, clearModelPhoto, downscaleImageFile } from '../lib/modelPhoto.js'
   import ItemPicker from './ItemPicker.svelte'
 
   const outfit = ui.editorOutfit
@@ -19,6 +20,8 @@
   let dirty = $state(false)
   let rendering = $state(false)
   let renderUrl = $state('') // результат «Облагородить» (data URL)
+  let modelPhoto = $state(getModelPhoto()) // фото Екатерины для примерки (localStorage)
+  let fileInput // hidden <input type=file>
 
   let stage, layer, tr
   const imgCache = new Map() // pictureGuid -> HTMLImageElement
@@ -233,14 +236,29 @@
       colors: (i.colors || []).map((c) => c.rounded || c.hex).filter(Boolean).slice(0, 2),
     }))
   }
+  function pickPhoto() { fileInput?.click() }
+  async function onModelFile(e) {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f) return
+    try {
+      const d = await downscaleImageFile(f, 800)
+      setModelPhoto(d); modelPhoto = d
+      toast('Фото добавлено · примеряю')
+      embellish()
+    } catch { toast('Не удалось загрузить фото') }
+  }
+  function removePhoto() { clearModelPhoto(); modelPhoto = ''; toast('Фото убрано') }
+
   async function embellish(mode = 'lookbook') {
     if (rendering) return
     select(null)
     const img = exportForRender()
     if (!img) { toast('Добавьте вещи в образ'); return }
+    if (!modelPhoto) { pickPhoto(); return } // первый раз — попросим фото Екатерины
     rendering = true
     try {
-      const { image } = await renderOutfit({ imageDataUrl: img, items: outfitItemsMeta(), mode })
+      const { image } = await renderOutfit({ imageDataUrl: img, items: outfitItemsMeta(), mode, person: modelPhoto })
       renderUrl = image
     } catch (e) {
       toast(e.message || 'Не удалось облагородить')
@@ -281,12 +299,12 @@
       keepRatio: true,
       rotateEnabled: true,
       enabledAnchors: ['top-left', 'top-right', 'bottom-left', 'bottom-right'],
-      anchorSize: 20,
+      anchorSize: 26,
       anchorStroke: '#2b2723',
-      anchorCornerRadius: 10,
+      anchorCornerRadius: 13,
       borderStroke: '#2b2723',
       borderStrokeWidth: 1.5,
-      rotateAnchorOffset: 28,
+      rotateAnchorOffset: 32,
     })
     layer.add(tr)
 
@@ -342,17 +360,23 @@
   <ItemPicker onpick={addItem} onclose={() => (picking = false)} />
 {/if}
 
+<input type="file" accept="image/*" bind:this={fileInput} onchange={onModelFile} hidden />
+
 {#if rendering}
   <div class="render-busy">
     <div class="r-spin"></div>
-    <div class="r-t">Облагораживаю образ…<br /><small>Nano Banana · ~10–20 с</small></div>
+    <div class="r-t">{modelPhoto ? 'Примеряю образ на вас…' : 'Облагораживаю образ…'}<br /><small>gpt-image-1 · ~минута</small></div>
   </div>
 {/if}
 
 {#if renderUrl}
   <div class="render-modal" onclick={() => (renderUrl = '')} role="presentation">
     <div class="render-card" onclick={(e) => e.stopPropagation()} role="dialog" aria-label="Результат">
-      <img src={renderUrl} alt="облагороженный образ" />
+      <img src={renderUrl} alt="образ на модели" />
+      <div class="render-hint">
+        {#if modelPhoto}На вашем фото · <button class="link" onclick={pickPhoto}>сменить</button> · <button class="link" onclick={removePhoto}>убрать</button>
+        {:else}На модели · <button class="link" onclick={pickPhoto}>примерить на себя</button>{/if}
+      </div>
       <div class="render-actions">
         <a class="rbtn" href={renderUrl} download="look.png">Скачать</a>
         <button class="rbtn ghost" onclick={() => embellish('lookbook')} disabled={rendering}>Ещё вариант</button>
@@ -364,7 +388,7 @@
 
 <style>
   .render-busy {
-    position: fixed; inset: 0; z-index: 300; max-width: 480px; margin: 0 auto;
+    position: fixed; inset: 0; z-index: 300; max-width: var(--app-w); margin: 0 auto;
     background: rgba(244, 241, 236, .9); backdrop-filter: blur(4px);
     display: flex; flex-direction: column; gap: 16px; align-items: center; justify-content: center;
     color: var(--ink-2); text-align: center;
@@ -373,7 +397,7 @@
   .r-t { font-size: 14px; } .r-t small { color: var(--muted); }
   @keyframes rspin { to { transform: rotate(360deg); } }
   .render-modal {
-    position: fixed; inset: 0; z-index: 320; max-width: 480px; margin: 0 auto;
+    position: fixed; inset: 0; z-index: 320; max-width: var(--app-w); margin: 0 auto;
     background: rgba(20,18,16,.72); display: flex; flex-direction: column;
     align-items: center; justify-content: center; padding: 18px; gap: 14px;
   }
@@ -385,4 +409,6 @@
     padding: 11px 16px; font: inherit; font-size: 14px; font-weight: 600; text-decoration: none;
   }
   .rbtn.ghost { background: rgba(255,255,255,.14); color: #fff; }
+  .render-hint { color: rgba(255,255,255,.85); font-size: 12.5px; text-align: center; }
+  .render-hint .link { background: none; border: none; color: #fff; text-decoration: underline; font: inherit; padding: 0; cursor: pointer; }
 </style>

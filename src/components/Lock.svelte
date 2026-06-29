@@ -54,7 +54,7 @@
 
 <style>
   .lock {
-    position: fixed; inset: 0; max-width: 480px; margin: 0 auto;
+    position: fixed; inset: 0; max-width: var(--app-w); margin: 0 auto;
     background: var(--bg); z-index: 300;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 6px; padding: 0 32px calc(var(--safe-b) + 20px);

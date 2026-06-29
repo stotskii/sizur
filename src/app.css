@@ -15,6 +15,17 @@
   --tab-h: 64px;
   --safe-b: env(safe-area-inset-bottom, 0px);
   --safe-t: env(safe-area-inset-top, 0px);
+  --app-w: 480px;          /* ширина «рамки» приложения; шире на планшетах */
+  --grid-cols: 3;          /* колонок в гридах вещей */
+  --grid-cols-outfits: 2;  /* колонок в гридах образов */
+}
+
+/* iPad mini и крупнее: шире колонка, больше плиток, просторнее холст редактора */
+@media (min-width: 700px) {
+  :root { --app-w: 700px; --grid-cols: 4; --grid-cols-outfits: 3; }
+}
+@media (min-width: 1024px) {
+  :root { --app-w: 820px; --grid-cols: 5; --grid-cols-outfits: 4; }
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -30,7 +41,7 @@ html, body {
 }
 
 #app {
-  max-width: 480px;
+  max-width: var(--app-w);
   margin: 0 auto;
   min-height: 100%;
   position: relative;
@@ -115,7 +126,7 @@ button { font-family: inherit; cursor: pointer; }
 }
 .grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(var(--grid-cols), 1fr);
   gap: 10px;
   padding: 0 14px;
 }
@@ -164,7 +175,7 @@ button { font-family: inherit; cursor: pointer; }
 .ghost-btn:active, .save-btn:active { transform: scale(.97); }
 
 /* ---- outfit gallery ---- */
-.grid.outfits { grid-template-columns: repeat(2, 1fr); }
+.grid.outfits { grid-template-columns: repeat(var(--grid-cols-outfits), 1fr); }
 .ocard .thumb { aspect-ratio: 3 / 4; }
 .ocard .thumb img { mix-blend-mode: normal; object-fit: contain; }
 .ocard .meta .name { -webkit-line-clamp: 1; }
@@ -172,7 +183,7 @@ button { font-family: inherit; cursor: pointer; }
 /* ---- tab bar ---- */
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0;
-  max-width: 480px; margin: 0 auto;
+  max-width: var(--app-w); margin: 0 auto;
   height: calc(var(--tab-h) + var(--safe-b));
   padding-bottom: var(--safe-b);
   background: rgba(244,241,236,.86);
@@ -211,7 +222,7 @@ button { font-family: inherit; cursor: pointer; }
 /* ---- canvas editor ---- */
 .editor {
   position: fixed; inset: 0;
-  max-width: 480px; margin: 0 auto;
+  max-width: var(--app-w); margin: 0 auto;
   display: flex; flex-direction: column;
   background: var(--bg);
   z-index: 100;
@@ -260,7 +271,7 @@ button { font-family: inherit; cursor: pointer; }
 .sheet-backdrop {
   position: fixed; inset: 0; background: rgba(20,18,16,.4);
   z-index: 120; display: flex; align-items: flex-end;
-  max-width: 480px; margin: 0 auto;
+  max-width: var(--app-w); margin: 0 auto;
 }
 .sheet {
   background: var(--bg); width: 100%;
@@ -301,7 +312,7 @@ button { font-family: inherit; cursor: pointer; }
 
 /* pushed full-screen route */
 .pushed {
-  position: fixed; inset: 0; max-width: 480px; margin: 0 auto;
+  position: fixed; inset: 0; max-width: var(--app-w); margin: 0 auto;
   background: var(--bg); z-index: 90; display: flex; flex-direction: column;
 }
 .pushed-bar {
