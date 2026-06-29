@@ -90,6 +90,11 @@ export async function checkOutfit(objects) {
   return deGuidDeep(v)
 }
 
+/** «Облагородить»: отправляет коллаж образа в image-gen (Nano Banana) и возвращает {image}. */
+export async function renderOutfit({ imageDataUrl, items = [], mode = 'lookbook' } = {}) {
+  return post('/stylist/render', { image: imageDataUrl, items, mode })
+}
+
 function loadDims(url) {
   return new Promise((resolve) => {
     const im = new Image()

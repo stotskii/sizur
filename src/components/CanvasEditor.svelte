@@ -3,8 +3,9 @@
   import Konva from 'konva'
   import { ui, toast, vt } from '../lib/state.svelte.js'
   import { saveOutfit } from '../lib/db.js'
-  import { patchOutfit } from '../lib/store.svelte.js'
+  import { patchOutfit, data } from '../lib/store.svelte.js'
   import { picUrl } from '../lib/catalog.js'
+  import { renderOutfit } from '../lib/ai.js'
   import ItemPicker from './ItemPicker.svelte'
 
   const outfit = ui.editorOutfit
@@ -16,6 +17,8 @@
   let canRedo = $state(false)
   let picking = $state(false)
   let dirty = $state(false)
+  let rendering = $state(false)
+  let renderUrl = $state('') // результат «Облагородить» (data URL)
 
   let stage, layer, tr
   const imgCache = new Map() // pictureGuid -> HTMLImageElement
@@ -204,6 +207,48 @@
     return url
   }
 
+  // высокое разрешение коллажа для image-gen (PNG, до ~1100px по большей стороне)
+  function exportForRender() {
+    const objects = serialize()
+    if (!objects.length) return ''
+    const minX = Math.min(...objects.map((o) => o.x))
+    const minY = Math.min(...objects.map((o) => o.y))
+    const maxX = Math.max(...objects.map((o) => o.x + o.w))
+    const maxY = Math.max(...objects.map((o) => o.y + o.h))
+    const cw = maxX - minX, ch = maxY - minY
+    const sc = layer.scale(), ps = layer.position()
+    layer.scale({ x: 1, y: 1 }); layer.position({ x: 0, y: 0 })
+    const ratio = Math.min(1100 / cw, 1100 / ch, 2)
+    let url = ''
+    try {
+      url = layer.toDataURL({ x: minX, y: minY, width: cw, height: ch, pixelRatio: ratio, mimeType: 'image/png' })
+    } catch (e) { url = '' }
+    layer.scale(sc); layer.position(ps); layer.draw()
+    return url
+  }
+  function outfitItemsMeta() {
+    const byGuid = new Map(data.items.map((i) => [i.guid, i]))
+    return serialize().map((o) => byGuid.get(o.article_guid)).filter(Boolean).map((i) => ({
+      type: i.type, brand: i.brand || null,
+      colors: (i.colors || []).map((c) => c.rounded || c.hex).filter(Boolean).slice(0, 2),
+    }))
+  }
+  async function embellish(mode = 'lookbook') {
+    if (rendering) return
+    select(null)
+    const img = exportForRender()
+    if (!img) { toast('Добавьте вещи в образ'); return }
+    rendering = true
+    try {
+      const { image } = await renderOutfit({ imageDataUrl: img, items: outfitItemsMeta(), mode })
+      renderUrl = image
+    } catch (e) {
+      toast(e.message || 'Не удалось облагородить')
+    } finally {
+      rendering = false
+    }
+  }
+
   async function save() {
     select(null)
     const objects = serialize()
@@ -277,6 +322,7 @@
            style="border:none;background:none;outline:none;font:inherit;font-weight:600" />
     <button class="ebtn" onclick={undo} disabled={!canUndo} aria-label="Отменить">↶</button>
     <button class="ebtn" onclick={redo} disabled={!canRedo} aria-label="Повторить">↷</button>
+    <button class="ebtn" onclick={() => embellish('lookbook')} disabled={rendering} aria-label="Облагородить">✨</button>
     <button class="ebtn primary" onclick={save}>Сохранить</button>
   </div>
 
@@ -295,3 +341,48 @@
 {#if picking}
   <ItemPicker onpick={addItem} onclose={() => (picking = false)} />
 {/if}
+
+{#if rendering}
+  <div class="render-busy">
+    <div class="r-spin"></div>
+    <div class="r-t">Облагораживаю образ…<br /><small>Nano Banana · ~10–20 с</small></div>
+  </div>
+{/if}
+
+{#if renderUrl}
+  <div class="render-modal" onclick={() => (renderUrl = '')} role="presentation">
+    <div class="render-card" onclick={(e) => e.stopPropagation()} role="dialog" aria-label="Результат">
+      <img src={renderUrl} alt="облагороженный образ" />
+      <div class="render-actions">
+        <a class="rbtn" href={renderUrl} download="look.png">Скачать</a>
+        <button class="rbtn ghost" onclick={() => embellish('lookbook')} disabled={rendering}>Ещё вариант</button>
+        <button class="rbtn ghost" onclick={() => (renderUrl = '')}>Закрыть</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<style>
+  .render-busy {
+    position: fixed; inset: 0; z-index: 300; max-width: 480px; margin: 0 auto;
+    background: rgba(244, 241, 236, .9); backdrop-filter: blur(4px);
+    display: flex; flex-direction: column; gap: 16px; align-items: center; justify-content: center;
+    color: var(--ink-2); text-align: center;
+  }
+  .r-spin { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(0,0,0,.12); border-top-color: var(--ink); animation: rspin .8s linear infinite; }
+  .r-t { font-size: 14px; } .r-t small { color: var(--muted); }
+  @keyframes rspin { to { transform: rotate(360deg); } }
+  .render-modal {
+    position: fixed; inset: 0; z-index: 320; max-width: 480px; margin: 0 auto;
+    background: rgba(20,18,16,.72); display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding: 18px; gap: 14px;
+  }
+  .render-card { width: 100%; display: flex; flex-direction: column; gap: 12px; }
+  .render-card img { width: 100%; border-radius: 16px; box-shadow: 0 12px 40px rgba(0,0,0,.4); background: #fff; }
+  .render-actions { display: flex; gap: 8px; justify-content: center; }
+  .rbtn {
+    border: none; background: var(--ink); color: #fff; border-radius: 12px;
+    padding: 11px 16px; font: inherit; font-size: 14px; font-weight: 600; text-decoration: none;
+  }
+  .rbtn.ghost { background: rgba(255,255,255,.14); color: #fff; }
+</style>

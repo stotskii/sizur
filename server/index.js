@@ -23,6 +23,9 @@ const AI_BASE = process.env.AI_BASE_URL || cfg.base
 const AI_KEY = process.env.AI_KEY || cfg.key || ''
 const PORT = Number(process.env.PORT || 8787)
 const APP_TOKEN = process.env.APP_TOKEN || ''
+// Image-gen («Облагородить»): всегда Gemini «Nano Banana», независимо от текстового AI_PROVIDER.
+const GEMINI_KEY = process.env.GEMINI_API_KEY || ''
+const GEMINI_IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image'
 const MOCK = process.env.MOCK === '1'
 const ALLOW_ORIGINS = (process.env.ALLOW_ORIGINS ||
   'https://sizur.xyz,http://localhost:5173,http://localhost:4173')
@@ -45,7 +48,7 @@ const json = (res, code, obj, origin) => {
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = ''
-    req.on('data', (c) => { data += c; if (data.length > 2_000_000) req.destroy() })
+    req.on('data', (c) => { data += c; if (data.length > 12_000_000) req.destroy() })
     req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}) } catch (e) { reject(e) } })
     req.on('error', reject)
   })
@@ -265,6 +268,52 @@ ${lines}`
   return callModel({ system: systemPrompt(items, body.styleDNA), user, maxTokens: 1500 })
 }
 
+// ---------- image-gen («Облагородить») ----------
+function renderPrompt(body) {
+  const mode = body.mode || 'lookbook'
+  const items = (body.items || [])
+    .map((i) => `${i.type || 'вещь'}${i.brand ? ' ' + i.brand : ''}${(i.colors || []).length ? ' (' + i.colors.map((c) => '#' + String(c).replace('#', '')).join('/') + ')' : ''}`)
+    .join(', ')
+  const dna = 'quiet luxury, elevated-casual; muted "complex" neutrals — powder, grey-blue, sage, burgundy-chocolate; soft natural Mediterranean daylight'
+  // ключевой приём (свежие гайды): сохранить идентичность вещей + назвать фактуру
+  const preserve = "This is a fitting preview, not a redesign: preserve EACH garment's exact color, pattern, cut, fabric and proportions; do not add, remove or restyle items, and do not invent new garments."
+  const itemsLine = items ? ` The outfit consists of: ${items}.` : ''
+  if (mode === 'flatlay') {
+    return `Studio fashion flat-lay of the exact garments shown, arranged elegantly on a warm linen surface with a few minimal props (a ceramic cup, a dried branch, fine gold jewelry).${itemsLine} ${preserve} Soft diffused overhead daylight, long gentle shadows, ${dna}. Editorial still-life, 4:5, ultra-detailed, no text, no watermark.`
+  }
+  if (mode === 'editorial') {
+    return `High-fashion editorial photograph of one full-body female model wearing the exact outfit shown.${itemsLine} ${preserve} ${dna}. Seamless warm-neutral studio backdrop, soft Rembrandt lighting, relaxed elegant pose, shot on Hasselblad medium format, refined color grading. 3:4, sharp focus, no text, no watermark, natural hands.`
+  }
+  // lookbook (default) — on a model, lifestyle
+  return `Dress ONE full-body female model wearing the exact outfit shown, as a single cohesive look.${itemsLine} ${preserve} Quiet-luxury editorial lookbook, ${dna}; relaxed candid full-length pose in a warm minimal interior or sunlit terrace; 85mm, f/2.2, Kodak Portra tones, subtle film grain. 3:4, full-length, no text, no watermark, natural hands.`
+}
+
+async function callGeminiImage({ prompt, dataUrl }) {
+  if (!GEMINI_KEY) throw new Error('нет GEMINI_API_KEY на сервере')
+  const m = /^data:([^;]+);base64,(.+)$/s.exec(dataUrl || '')
+  if (!m) throw new Error('плохое изображение')
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_IMAGE_MODEL}:generateContent?key=${GEMINI_KEY}`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: m[1], data: m[2] } }] }],
+    }),
+  })
+  const j = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(j.error?.message || `Gemini HTTP ${res.status}`)
+  const parts = j.candidates?.[0]?.content?.parts || []
+  const imgPart = parts.find((p) => p.inlineData?.data || p.inline_data?.data)
+  const inl = imgPart?.inlineData || imgPart?.inline_data
+  if (!inl?.data) throw new Error('Gemini не вернул изображение')
+  return `data:${inl.mimeType || inl.mime_type || 'image/png'};base64,${inl.data}`
+}
+
+async function handleRender(body) {
+  const image = await callGeminiImage({ prompt: renderPrompt(body), dataUrl: body.image })
+  return { image }
+}
+
 // ---------- server ----------
 const server = http.createServer(async (req, res) => {
   const origin = req.headers.origin || ''
@@ -281,6 +330,7 @@ const server = http.createServer(async (req, res) => {
   try {
     if (url === '/stylist/build') return json(res, 200, await handleBuild(body), origin)
     if (url === '/stylist/check') return json(res, 200, await handleCheck(body), origin)
+    if (url === '/stylist/render') return json(res, 200, await handleRender(body), origin)
     return json(res, 404, { error: 'not found' }, origin)
   } catch (e) {
     console.error('error on', url, ':', e?.message || e)
