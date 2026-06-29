@@ -25,8 +25,9 @@ const PORT = Number(process.env.PORT || 8787)
 const APP_TOKEN = process.env.APP_TOKEN || ''
 // Image-gen («Облагородить»): всегда Gemini «Nano Banana», независимо от текстового AI_PROVIDER.
 const GEMINI_KEY = process.env.GEMINI_API_KEY || ''
-const GEMINI_IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image'
+const GEMINI_IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-3-pro-image' // Nano Banana Pro (нужен billing)
 const OPENAI_IMAGE_KEY = process.env.OPENAI_IMAGE_API_KEY || process.env.OPENAI_API_KEY || ''
+const OPENAI_IMAGE_MODEL = process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2' // «Image Gen 2», новейший
 // провайдер image-gen: openai (gpt-image-1) | gemini (nano banana). По умолч. — openai, если есть ключ.
 const IMAGE_PROVIDER = process.env.IMAGE_PROVIDER || (OPENAI_IMAGE_KEY ? 'openai' : 'gemini')
 const IMAGE_SIZE = process.env.IMAGE_SIZE || '1024x1536'
@@ -281,19 +282,20 @@ function renderPrompt(body) {
   const dna = 'quiet luxury, elevated-casual; muted "complex" neutrals — powder, grey-blue, sage, burgundy-chocolate; soft natural Mediterranean daylight'
   // ключевой приём (свежие гайды): сохранить идентичность вещей + назвать фактуру
   const preserve = "This is a fitting preview, not a redesign: preserve EACH garment's exact color, pattern, cut, fabric and proportions; do not add, remove or restyle items, and do not invent new garments."
+  const beauty = 'Always portray a strikingly beautiful, elegant and photogenic woman — flattering soft lighting, subtle natural makeup, polished hair, graceful confident posture, magazine-grade quality.'
   const itemsLine = items ? ` The outfit consists of: ${items}.` : ''
   // примерка на фото владелицы: первое изображение — её фото, второе — коллаж её вещей
   if (body.person) {
-    return `Photorealistic full-length fashion photo of the SAME woman shown in the first reference photo, dressed in the EXACT outfit shown in the second reference (a flat collage of her own garments).${itemsLine} Preserve her face, hairstyle, skin tone, age and body shape precisely — it must clearly be the same person, a natural likeness, not a different model. ${preserve} ${dna}; relaxed natural full-length pose, soft daylight, clean warm-neutral setting, 85mm, subtle film grain. 3:4, full-length, sharp focus on face and garments, no text, no watermark, natural hands.`
+    return `Photorealistic full-length fashion photo of the SAME woman shown in the first reference photo, dressed in the EXACT outfit shown in the second reference (a flat collage of her own garments).${itemsLine} Keep her exact face, identity and likeness — it must clearly be the same person, a natural likeness, not a different model — but portray her at her most beautiful and flattering: soft professional lighting, subtle natural makeup, polished hair, elegant confident pose. ${preserve} ${dna}; relaxed natural full-length pose, clean warm-neutral setting, 85mm, subtle film grain. 3:4, full-length, sharp focus on face and garments, no text, no watermark, natural hands.`
   }
   if (mode === 'flatlay') {
     return `Studio fashion flat-lay of the exact garments shown, arranged elegantly on a warm linen surface with a few minimal props (a ceramic cup, a dried branch, fine gold jewelry).${itemsLine} ${preserve} Soft diffused overhead daylight, long gentle shadows, ${dna}. Editorial still-life, 4:5, ultra-detailed, no text, no watermark.`
   }
   if (mode === 'editorial') {
-    return `High-fashion editorial photograph of one full-body female model wearing the exact outfit shown.${itemsLine} ${preserve} ${dna}. Seamless warm-neutral studio backdrop, soft Rembrandt lighting, relaxed elegant pose, shot on Hasselblad medium format, refined color grading. 3:4, sharp focus, no text, no watermark, natural hands.`
+    return `High-fashion editorial photograph of one full-body female model wearing the exact outfit shown.${itemsLine} ${beauty} ${preserve} ${dna}. Seamless warm-neutral studio backdrop, soft Rembrandt lighting, relaxed elegant pose, shot on Hasselblad medium format, refined color grading. 3:4, sharp focus, no text, no watermark, natural hands.`
   }
   // lookbook (default) — on a model, lifestyle
-  return `Dress ONE full-body female model wearing the exact outfit shown, as a single cohesive look.${itemsLine} ${preserve} Quiet-luxury editorial lookbook, ${dna}; relaxed candid full-length pose in a warm minimal interior or sunlit terrace; 85mm, f/2.2, Kodak Portra tones, subtle film grain. 3:4, full-length, no text, no watermark, natural hands.`
+  return `Dress ONE full-body female model wearing the exact outfit shown, as a single cohesive look.${itemsLine} ${beauty} ${preserve} Quiet-luxury editorial lookbook, ${dna}; relaxed candid full-length pose in a warm minimal interior or sunlit terrace; 85mm, f/2.2, Kodak Portra tones, subtle film grain. 3:4, full-length, no text, no watermark, natural hands.`
 }
 
 async function callGeminiImage({ prompt, dataUrl }) {
@@ -348,7 +350,7 @@ async function callOpenAIImage({ prompt, dataUrl, personDataUrl }) {
   if (tryon) files.push(fileFromDataUrl(personDataUrl, 'image[]', 'person'))
   files.push(fileFromDataUrl(dataUrl, tryon ? 'image[]' : 'image', 'outfit'))
   const { body, boundary } = multipartBody(
-    { model: 'gpt-image-1', prompt, size: IMAGE_SIZE, input_fidelity: 'high', quality: 'medium' },
+    { model: OPENAI_IMAGE_MODEL, prompt, size: IMAGE_SIZE, input_fidelity: 'high', quality: 'medium' },
     files
   )
   const res = await fetch('https://api.openai.com/v1/images/edits', {
