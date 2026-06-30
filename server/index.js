@@ -315,6 +315,7 @@ async function handleHomeToggle(body) {
     body: JSON.stringify({ entity_id: entity }),
   })
   if (!r.ok) throw new Error(`HA HTTP ${r.status}`)
+  await new Promise((s) => setTimeout(s, 800)) // дать Zigbee2MQTT применить состояние
   return { ok: true, target: body.target, state: await haState(entity).catch(() => 'unknown') }
 }
 
