@@ -17,6 +17,7 @@
   import Calendar from './components/Calendar.svelte'
   import PlusSheet from './components/PlusSheet.svelte'
   import PhotoImport from './components/PhotoImport.svelte'
+  import HomeControls from './components/HomeControls.svelte'
 
   let unlocked = $state(isUnlocked())
   let ready = $state(false)
@@ -85,6 +86,11 @@
 
   {#if ui.plusSheet}
     <PlusSheet />
+  {/if}
+
+  <!-- умный дом: свет/зеркала гардеробной, сквозь все экраны -->
+  {#if !ui.photoImport}
+    <HomeControls />
   {/if}
 {/if}
 

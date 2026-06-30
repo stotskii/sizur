@@ -90,6 +90,20 @@ export async function checkOutfit(objects) {
   return deGuidDeep(v)
 }
 
+/** Умный дом: текущее состояние сущностей (свет/зеркала) гардеробной. */
+export async function homeState() {
+  try {
+    const r = await fetch(BASE + '/home/state')
+    return r.ok ? r.json() : { configured: false }
+  } catch {
+    return { configured: false }
+  }
+}
+/** Умный дом: переключить цель ('light' | 'mirror'). */
+export async function homeToggle(target) {
+  return post('/home/toggle', { target, action: 'toggle' })
+}
+
 /** «Облагородить»: отправляет коллаж образа в image-gen (Nano Banana) и возвращает {image}. */
 export async function renderOutfit({ imageDataUrl, items = [], mode = 'lookbook', person = '' } = {}) {
   return post('/stylist/render', { image: imageDataUrl, items, mode, person })

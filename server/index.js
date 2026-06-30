@@ -284,6 +284,40 @@ ${lines}`
   return callModel({ system: systemPrompt(items, body.styleDNA), user, maxTokens: 1500 })
 }
 
+// ---------- умный дом (Home Assistant) ----------
+const HA_BASE_URL = (process.env.HA_BASE_URL || '').replace(/\/$/, '') // https://…ui.nabu.casa или http://homeassistant.local:8123
+const HA_TOKEN = process.env.HA_TOKEN || ''
+const HA_ENTITIES = {
+  light: process.env.HA_LIGHT_ENTITY || 'switch.yd_15_1',   // свет гардеробной
+  mirror: process.env.HA_MIRROR_ENTITY || 'switch.yd_15_2', // зеркала
+}
+const haReady = () => !!(HA_BASE_URL && HA_TOKEN)
+async function haState(entity) {
+  const r = await fetch(`${HA_BASE_URL}/api/states/${entity}`, { headers: { authorization: `Bearer ${HA_TOKEN}` } })
+  if (!r.ok) return 'unknown'
+  return (await r.json().catch(() => ({}))).state || 'unknown'
+}
+async function handleHomeState() {
+  if (!haReady()) return { configured: false }
+  const out = { configured: true }
+  for (const [k, e] of Object.entries(HA_ENTITIES)) out[k] = await haState(e).catch(() => 'unknown')
+  return out
+}
+async function handleHomeToggle(body) {
+  if (!haReady()) throw new Error('Home Assistant не настроен (HA_BASE_URL/HA_TOKEN)')
+  const entity = HA_ENTITIES[body.target]
+  if (!entity) throw new Error('неизвестная цель')
+  const action = body.action === 'on' ? 'turn_on' : body.action === 'off' ? 'turn_off' : 'toggle'
+  const domain = entity.split('.')[0]
+  const r = await fetch(`${HA_BASE_URL}/api/services/${domain}/${action}`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${HA_TOKEN}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ entity_id: entity }),
+  })
+  if (!r.ok) throw new Error(`HA HTTP ${r.status}`)
+  return { ok: true, target: body.target, state: await haState(entity).catch(() => 'unknown') }
+}
+
 // ---------- image-gen («Облагородить») ----------
 function renderPrompt(body) {
   const mode = body.mode || 'lookbook'
@@ -390,7 +424,11 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204, cors(origin)); return res.end() }
   const url = req.url || '/'
   if (req.method === 'GET' && url === '/health') {
-    return json(res, 200, { ok: true, provider: PROVIDER, model: MODEL, base: AI_BASE, hasKey: !!AI_KEY }, origin)
+    return json(res, 200, { ok: true, provider: PROVIDER, model: MODEL, base: AI_BASE, hasKey: !!AI_KEY, home: haReady() }, origin)
+  }
+  if (req.method === 'GET' && url === '/home/state') {
+    try { return json(res, 200, await handleHomeState(), origin) }
+    catch (e) { return json(res, 200, { configured: false, error: e?.message }, origin) }
   }
   if (req.method !== 'POST') return json(res, 404, { error: 'not found' }, origin)
   if (APP_TOKEN && req.headers['x-app-token'] !== APP_TOKEN) return json(res, 401, { error: 'unauthorized' }, origin)
@@ -401,6 +439,7 @@ const server = http.createServer(async (req, res) => {
     if (url === '/stylist/build') return json(res, 200, await handleBuild(body), origin)
     if (url === '/stylist/check') return json(res, 200, await handleCheck(body), origin)
     if (url === '/stylist/render') return json(res, 200, await handleRender(body), origin)
+    if (url === '/home/toggle') return json(res, 200, await handleHomeToggle(body), origin)
     return json(res, 404, { error: 'not found' }, origin)
   } catch (e) {
     console.error('error on', url, ':', e?.message || e)
